@@ -156,7 +156,7 @@ def visualize_perturb_comparison(json_dirs, output_dir, ckpt_type):
     print(f"Aligned perturbations: {perturbations}")
     os.makedirs(output_dir, exist_ok=True)
     for metric in ["Accuracy", "F1"]:
-        save_path = os.path.join(output_dir, f"{metric}_{dataset_label}_comparison.png")
+        save_path = os.path.join(output_dir, f"{metric}_{dataset_label}_{ckpt_type}_comparison.png")
         plot_perturb_comparison(all_metrics, model_names, perturbations, metric, dataset_label, save_path)
 
 
@@ -217,6 +217,67 @@ def plot_stepwise_per_class_accuracy(entries, title, save_path, dataset):
     plt.close(fig)
     print(f"Saved stepwise per-class accuracy plot to {save_path}")
 
+def visualize_stepwise_combined(stepwise_dirs, output_dir):
+    """Plot per-class accuracy from multiple runs on a single figure."""
+    os.makedirs(output_dir, exist_ok=True)
+
+    all_runs = []
+    for d in stepwise_dirs:
+        entries = collect_stepwise_metrics(d)
+        if not entries:
+            print(f"No stepwise JSONs with per_class_acc in {d}, skipping.")
+            continue
+        cfg = load_run_config(d)
+        label = f"ELM: {cfg['elm']} | LLM: {cfg['llm']} | Enc: {cfg['encoder']}" if cfg else Path(d).resolve().name
+        dataset = derive_dataset_name(d)
+        all_runs.append({"entries": entries, "label": label, "dataset": dataset, "dir": d})
+
+    if not all_runs:
+        print("No valid stepwise data found.")
+        return
+
+    # use class mapping from the first run
+    class_map = create_class_mapping(all_runs[0]["dataset"])
+    classes = sorted(all_runs[0]["entries"][0]["per_class_acc"].keys())
+
+    fig, axes = plt.subplots(1, len(classes), figsize=(8 * len(classes), 7), sharey=True)
+    if len(classes) == 1:
+        axes = [axes]
+
+    linestyles = ["-", "--", "-.", ":"]
+    run_colors = [plt.cm.tab10(i) for i in range(len(all_runs))]
+
+    for cls_idx, cls in enumerate(classes):
+        ax = axes[cls_idx]
+        for run_idx, run in enumerate(all_runs):
+            entries = run["entries"]
+            steps = [e["step"] for e in entries]
+            means = np.array([e["per_class_acc"][cls]["mean"] for e in entries])
+            stds = np.array([e["per_class_acc"][cls]["std"] for e in entries])
+            color = run_colors[run_idx]
+            ls = linestyles[run_idx % len(linestyles)]
+            ax.plot(steps, means, marker="o", label=run["label"], color=color,
+                    linestyle=ls, linewidth=2.5, markersize=6)
+            ax.fill_between(steps, means - stds, means + stds, alpha=0.15, color=color)
+
+        ax.set_title(f"Class: {class_map.get(cls, cls)}", fontsize=16)
+        ax.set_xlabel("Training Step", fontsize=14)
+        if cls_idx == 0:
+            ax.set_ylabel("Accuracy (%)", fontsize=14)
+        ax.set_ylim(bottom=0)
+        ax.grid(axis="y", alpha=0.3)
+        ax.tick_params(labelsize=12)
+
+    # single shared legend
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.02),
+               ncol=min(len(all_runs), 3), fontsize=11)
+    fig.suptitle("Per-Class Accuracy Over Training", fontsize=18, fontweight="bold", y=1.06)
+    fig.tight_layout()
+    save_path = os.path.join(output_dir, "stepwise_per_class_combined.png")
+    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved combined stepwise plot to {save_path}")
 
 def visualize_stepwise(stepwise_dirs, output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -229,11 +290,11 @@ def visualize_stepwise(stepwise_dirs, output_dir):
         label = f"ELM: {cfg['elm']} LLM: {cfg['llm']} Encoder: {cfg['encoder']}" if cfg else Path(d).resolve().name
         dataset = derive_dataset_name(d)
         # title = f"Per-Class Accuracy Over Training\n{label}\n{dataset}"
-        title = f"Per-Class Accuracy Over Training\n{dataset}"
+        title = "Per-Class Accuracy Evaluated\non Test Set Over Training Steps"
         safe = Path(d).resolve().name
         if safe == "checkpoints":
             safe = Path(d).resolve().parent.name
-        save_path = os.path.join(output_dir, f"stepwise_per_class_{safe}.png")
+        save_path = os.path.join(output_dir, f"stepwise_per_class_{safe}_{dataset}.png")
         plot_stepwise_per_class_accuracy(entries, title, save_path, dataset)
 
 
@@ -242,7 +303,10 @@ def main():
     if args.json_dirs:
         visualize_perturb_comparison(args.json_dirs, args.output_dir, args.ckpt_type)
     if args.stepwise_dirs:
-        visualize_stepwise(args.stepwise_dirs, args.output_dir)
+        if len(args.stepwise_dirs) > 1:
+            visualize_stepwise_combined(args.stepwise_dirs, args.output_dir)
+        else:
+            visualize_stepwise(args.stepwise_dirs, args.output_dir)
 
 
 if __name__ == "__main__":
