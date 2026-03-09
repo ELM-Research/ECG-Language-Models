@@ -256,7 +256,11 @@ def evaluate(elm, dataloader, args):
                     }
                     if needs_signal_injection:
                         gen_batch["encoder_tokenizer_out"] = full_encoder_tokenizer_out
-                        gen_batch["signal_id_indices"] = signal_indices
+                        # Mask out signal indices that fall outside the truncated sequence
+                        truncated_len = len(sub_ids)
+                        masked_indices = signal_indices.clone()
+                        masked_indices[masked_indices >= truncated_len] = -2
+                        gen_batch["signal_id_indices"] = masked_indices
                     gen_batch = {k: batch_to_device(v, device) for k, v in gen_batch.items()}
                     gen_out = elm.generate(**gen_batch)[0].cpu().tolist()
                     gen_txt = dataset.get_generated_response_for_turn(sub_ids, gen_out)
