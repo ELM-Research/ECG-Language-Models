@@ -96,6 +96,15 @@ class BuildEncoder:
     def load_nn_checkpoint(self, encoder_components):
         ckpt = torch.load(self.args.encoder_ckpt, map_location="cpu", weights_only=False)
         state = ckpt["model_state_dict"]
+        # Strip wrapper prefixes (e.g. 'st_mem.' from ECG-Bench checkpoints)
+        model_keys = set(encoder_components["encoder"].state_dict().keys())
+        if not (model_keys & set(state.keys())):
+            prefixes = {k.split('.', 1)[0] for k in state.keys() if '.' in k}
+            for prefix in prefixes:
+                stripped = {k[len(prefix)+1:]: v for k, v in state.items() if k.startswith(prefix + '.')}
+                if model_keys & set(stripped.keys()):
+                    state = stripped
+                    break
         encoder_components["encoder"].load_state_dict(state, strict=False)
         if is_main():
             print(f"Loaded {self.args.encoder} checkpoint from {self.args.encoder_ckpt}")
