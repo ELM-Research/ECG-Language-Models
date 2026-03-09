@@ -49,11 +49,18 @@ def main():
                 gpu_setup.print_model_device(elm, f"{args.llm}_{args.encoder}")
             out = evaluate(elm, dataloader, args)
             all_metrics.append(out)
+            if len(all_metrics) == 1:
+                examples_path = results_file.replace(".json", "_examples.json")
+                examples = [{"prompt": p, "predicted": h, "ground_truth": r}
+                            for p, h, r in zip(out["prompts"], out["hypotheses"], out["references"])]
+                with open(examples_path, "w") as ef:
+                    json.dump(examples, ef, indent=2)
+                print(f"Saved {len(examples)} eval examples to {examples_path}")
         if "confusion_matrix" in out:
             cm_path = results_file.replace(".json", f"{fold}_{seed}.png")
             save_confusion_matrix_png(out["confusion_matrix"], cm_path)
             other_path = results_file.replace(".json", f"{fold}_{seed}_other.png")
-            save_other_outputs_histogram_png(out["other_output_counts"], other_path, top_k = 20)
+            save_other_outputs_histogram_png(out["other_output_counts"], other_path, top_k = 10)
         incorrect_path = results_file.replace(".json", f"{fold}_{seed}_incorrect.png")
         save_incorrect_predictions_histogram_png(out["references"], out["hypotheses"], incorrect_path)
     statistical_results = run_statistical_analysis(all_metrics)
