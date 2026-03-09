@@ -42,7 +42,7 @@ class BaseElf(nn.Module):
             if projected_embeds.ndim == 2:
                 projected_embeds = projected_embeds.unsqueeze(1)
             if signal_id_indices.ndim == 1:
-                signal_id_indices = signal_id_indices.unsqueeze(1)
+                signal_id_indices = signal_id_indices.unsqueeze(0)
 
             assert projected_embeds.shape[:2] == signal_id_indices.shape
             assert projected_embeds.shape[0] == B and projected_embeds.shape[2] == H
