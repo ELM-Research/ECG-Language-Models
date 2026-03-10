@@ -142,6 +142,21 @@ class Base(Dataset):
         padding_len = self.args.llm_input_len - len(tokens)
         return [self.llm_tokenizer.pad_token_id] * padding_len + tokens  # left side padding
 
+    def truncate_input_preserving_signal_tokens(self, tokens: list[int]) -> list[int]:
+        overflow = len(tokens) - self.args.llm_input_len
+        if overflow <= 0:
+            return tokens
+
+        signal_token_id = self.llm_tokenizer.convert_tokens_to_ids(SIGNAL_TOKEN_PLACEHOLDER)
+        truncated = []
+        for token in tokens:
+            if overflow > 0 and token != signal_token_id:
+                overflow -= 1
+                continue
+            truncated.append(token)
+
+        return truncated[-self.args.llm_input_len :]
+
     def make_prompt(
         self,
         text: str,

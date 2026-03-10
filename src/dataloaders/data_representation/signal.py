@@ -79,8 +79,7 @@ class Signal(Base):
                 return prompt_tokens
             elif prompt_len < self.args.llm_input_len:
                 return self.pad_input(prompt_tokens)
-            truncated_prompt = prompt_tokens[-self.args.llm_input_len :]
-            return truncated_prompt
+            return self.truncate_input_preserving_signal_tokens(prompt_tokens)
         else:
             return prompt_tokens
 

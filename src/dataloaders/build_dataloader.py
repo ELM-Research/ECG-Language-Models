@@ -63,4 +63,5 @@ class BuildDataLoader:
         batch = [item for item in batch if item is not None]
         if len(batch) == 0:
             return None
+
         return torch.utils.data.dataloader.default_collate(batch)
