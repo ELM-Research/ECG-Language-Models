@@ -148,9 +148,10 @@ class Base(Dataset):
             return tokens
 
         signal_token_id = self.llm_tokenizer.convert_tokens_to_ids(SIGNAL_TOKEN_PLACEHOLDER)
+        bos_token_id = next(iter(HF_LLMS[self.args.llm]["watch_tokens"]["bos_token"]))
         truncated = []
         for token in tokens:
-            if overflow > 0 and token != signal_token_id:
+            if overflow > 0 and token != signal_token_id and token != bos_token_id:
                 overflow -= 1
                 continue
             truncated.append(token)
