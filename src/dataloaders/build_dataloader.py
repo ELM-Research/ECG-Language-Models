@@ -1,6 +1,7 @@
 import argparse
 
 import torch
+import numpy as np
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
 
@@ -60,7 +61,21 @@ class BuildDataLoader:
         return sampler
 
     def collate_fn(self, batch):
+        def _ensure_resizable_storage(item):
+            if torch.is_tensor(item):
+                return item.clone()
+            if isinstance(item, np.ndarray):
+                return torch.tensor(item)
+            if isinstance(item, dict):
+                return {key: _ensure_resizable_storage(value) for key, value in item.items()}
+            if isinstance(item, list):
+                return [_ensure_resizable_storage(value) for value in item]
+            if isinstance(item, tuple):
+                return tuple(_ensure_resizable_storage(value) for value in item)
+            return item
+
         batch = [item for item in batch if item is not None]
         if len(batch) == 0:
             return None
+        batch = [_ensure_resizable_storage(item) for item in batch]
         return torch.utils.data.dataloader.default_collate(batch)
