@@ -96,9 +96,30 @@ class BuildEncoder:
     def load_nn_checkpoint(self, encoder_components):
         ckpt = torch.load(self.args.encoder_ckpt, map_location="cpu", weights_only=False)
         state = ckpt["model_state_dict"]
+
+        model_keys = set(encoder_components["encoder"].state_dict().keys())
+        ckpt_keys = set(state.keys())
+
+        loaded_keys = model_keys & ckpt_keys
+        missing_from_ckpt = model_keys - ckpt_keys
+        unused_in_ckpt = ckpt_keys - model_keys
+
         encoder_components["encoder"].load_state_dict(state, strict=False)
+
         if is_main():
-            print(f"Loaded {self.args.encoder} checkpoint from {self.args.encoder_ckpt}")
+            print(f"\nLoaded {self.args.encoder} checkpoint from {self.args.encoder_ckpt}")
+            if not missing_from_ckpt and not unused_in_ckpt:
+                print("  All layers loaded from checkpoint.")
+            else:
+                if missing_from_ckpt:
+                    print(f"  Layers NOT loaded (not in checkpoint) [{len(missing_from_ckpt)}]:")
+                    for k in sorted(missing_from_ckpt):
+                        print(f"    - {k}")
+                if unused_in_ckpt:
+                    print(f"  Checkpoint layers ignored (not in model) [{len(unused_in_ckpt)}]:")
+                    for k in sorted(unused_in_ckpt):
+                        print(f"    - {k}")
+                print(f"  Loaded: {len(loaded_keys)}/{len(model_keys)} model layers\n")
 
     def calculate_patch_size(self):
         min_patches = 16
@@ -115,10 +136,3 @@ class BuildEncoder:
         else:
             patch_size = min(patch_candidates, key=lambda x: abs(self.args.segment_len // x - 32))
         return patch_size
-
-    def check_ckpt(self, model):
-        import hashlib
-        h = hashlib.md5()
-        for p in model.parameters():
-            h.update(p.data.cpu().numpy().tobytes())
-        return h.hexdigest()
