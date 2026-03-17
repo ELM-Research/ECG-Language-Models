@@ -237,7 +237,7 @@ CUDA_VISIBLE_DEVICES=0 uv run src/main_chat.py \
 --data_representation signal
 ```
 
-Currently, we have a pretrained checkpoint available in `examples/`. After running the script, please load in the ECG by typing the following in the first turn:
+After running the script, please load in the ECG by typing the following in the first turn:
 
 ```
 ============================================================
