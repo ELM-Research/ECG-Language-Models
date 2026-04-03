@@ -51,6 +51,9 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--llm_input_len", type=int, default=2048, help="LLM Input Sequence Length")
         parser.add_argument("--min_ecg_tokens_len", type=int, default=512, help="Minimum ECG token length to consider")
         parser.add_argument("--norm_eps", type=float, default=1e-6, help="Please choose the normalization epsilon")
+    if mode in {"eval", "inference"}:
+        parser.add_argument("--eval_batch_size", type=int, default=1, help="Batch size for batched generation during eval/inference")
+
     if mode == "train":
         parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "adamw", "muon"], help="Optimizer type")
         parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
