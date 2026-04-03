@@ -3,6 +3,7 @@ from typing import Any, Dict, Iterable, Mapping
 
 from elms.connectors.linear_proj import LinearProjection
 from elms.connectors.patch_proj import PatchProjection
+from elms.connectors.cnn_patch_proj import CNNPatchProjection
 
 from configs.constants import ECG_ENCODERS, VISION_ENCODERS
 
@@ -36,6 +37,8 @@ class ConnectNN:
             encoder_llm_components = self.build_base_elf()
         elif self.args.elm == "patch_elf":
             encoder_llm_components = self.build_patch_elf()
+        elif self.args.elm == "conv_elf":
+            encoder_llm_components = self.build_conv_elf()
         elif self.args.elm == "ecg_byte":
             encoder_llm_components = {"elm": self.llm_components["llm"]}
         return merge_dicts(
@@ -78,6 +81,17 @@ class ConnectNN:
             f"segment_len ({self.args.segment_len}) must be divisible by num_encoder_tokens ({num_patches})"
         patch_dim = num_leads * (self.args.segment_len // num_patches)
         projection_layer = PatchProjection(num_patches, patch_dim, self.args.llm)
+        encoder_llm = BaseElf(self.llm_components["llm"], projection_layer,
+                           True if self.args.perturb == "only_text" else False)
+        return {"elm": encoder_llm}
+
+    def build_conv_elf(self):
+        from elms.llm_encoders.base_elf import BaseElf
+        num_leads = len(self.args.leads)
+        num_patches = self.args.num_encoder_tokens
+        assert self.args.segment_len % num_patches == 0, \
+            f"segment_len ({self.args.segment_len}) must be divisible by num_encoder_tokens ({num_patches})"
+        projection_layer = CNNPatchProjection(num_patches, num_leads, self.args.llm)
         encoder_llm = BaseElf(self.llm_components["llm"], projection_layer,
                            True if self.args.perturb == "only_text" else False)
         return {"elm": encoder_llm}
