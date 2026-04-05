@@ -4,10 +4,15 @@ from tqdm import tqdm
 import torch
 from collections import Counter
 import string
+from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
+from nltk.translate.meteor_score import meteor_score as nltk_meteor
+from rouge_score.rouge_scorer import RougeScorer
 
 from utils.gpu_manager import is_main, train_dev_break
 
 from runners.helper import batch_to_device
+
+_rouge_scorer = RougeScorer(["rougeL"], use_stemmer=True)
 
 def calculate_acc(references, hypotheses):
     return np.mean([ref == hyp for ref, hyp in zip(references, hypotheses)])
@@ -20,11 +25,19 @@ def evaluate_strings(references, hypotheses):
         return {
             "ACC": 0.0,
             "F1": 0.0,
+            "BLEU-4": 0.0,
+            "ROUGE-L": 0.0,
+            "METEOR": 0.0,
+            "BERTScore-F1": 0.0,
         }
     valid_refs, valid_hyps = zip(*valid_pairs)
     return {
         "ACC": calculate_acc(valid_refs, valid_hyps),
         "F1": calculate_f1(valid_refs, valid_hyps),
+        "BLEU-4": calculate_bleu4(valid_refs, valid_hyps),
+        "ROUGE-L": calculate_rouge_l(valid_refs, valid_hyps),
+        "METEOR": calculate_meteor(valid_refs, valid_hyps),
+        "BERTScore-F1": calculate_bertscore_f1(valid_refs, valid_hyps),
     }
 def _normalize(text):
     text = text.lower()
@@ -49,6 +62,21 @@ def _token_f1(ref, hyp):
 
 def calculate_f1(references, hypotheses):
     return np.mean([_token_f1(ref, hyp) for ref, hyp in zip(references, hypotheses)])
+
+def calculate_bleu4(references, hypotheses):
+    return corpus_bleu([[r.split()] for r in references], [h.split() for h in hypotheses],
+                       weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=SmoothingFunction().method1)
+
+def calculate_rouge_l(references, hypotheses):
+    return np.mean([_rouge_scorer.score(r, h)["rougeL"].fmeasure for r, h in zip(references, hypotheses)])
+
+def calculate_meteor(references, hypotheses):
+    return np.mean([nltk_meteor([r.split()], h.split()) for r, h in zip(references, hypotheses)])
+
+def calculate_bertscore_f1(references, hypotheses):
+    from bert_score import score as bert_score
+    _, _, f1 = bert_score(hypotheses, references, lang="en", verbose=False)
+    return f1.mean().item()
 
 def compute_classification_metrics(references, hypotheses):
     valid_classes = set(references)
@@ -222,7 +250,8 @@ def save_incorrect_predictions_histogram_png(references, hypotheses, path, top_k
 def evaluate(elm, dataloader, args):
     show_progress = is_main()
     elm.eval()
-    needs_signal_injection = args.elm in ("llava", "base_elm", "patch_elm")
+    needs_signal_injection = args.elm in ("llava", "base_elf", 
+                                          "patch_elf", "conv_elf")
     progress = tqdm(
         dataloader,
         desc=f"LLM: {args.llm} ENCODER: {args.encoder}",
@@ -253,10 +282,10 @@ def evaluate(elm, dataloader, args):
                     gen_batch = {
                         "elm_input_ids": torch.tensor(sub_ids, dtype=torch.int64).unsqueeze(0),
                         "elm_attention_mask": torch.tensor(sub_attn, dtype=torch.float32).unsqueeze(0),
+                        "max_new_tokens": args.max_new_tokens
                     }
                     if needs_signal_injection:
                         gen_batch["encoder_tokenizer_out"] = full_encoder_tokenizer_out
-                        # Mask out signal indices that fall outside the truncated sequence
                         truncated_len = len(sub_ids)
                         masked_indices = signal_indices.clone()
                         masked_indices[masked_indices >= truncated_len] = -1
@@ -273,16 +302,16 @@ def evaluate(elm, dataloader, args):
                         all_prompts.append(dataset.llm_tokenizer.decode(sub_ids, skip_special_tokens=True).strip())
                         all_refs.append(gt)
                         all_hyps.append(gen_txt)
-            # if train_dev_break(getattr(args, "dev", False), batch, 0):
-            #     break
+            if train_dev_break(getattr(args, "dev", False), batch, 0):
+                break
             # if batch_idx == 10:
             #     break
             # input()
     results = evaluate_strings(all_refs, all_hyps)
     print("\n=== N-Turn Evaluation (generated vs. gold response only) ===")
     print(f"Pairs: {len(all_refs)}")
-    print(f"ACC: {results['ACC']:.4f}")
-    print(f"F1:  {results['F1']:.4f}")
+    for k, v in results.items():
+        print(f"{k}: {v:.4f}")
     out = {
         "num_pairs": len(all_refs),
         "metrics": results,
