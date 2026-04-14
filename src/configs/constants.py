@@ -322,6 +322,7 @@ VISION_ENCODERS_INPUT_MAPPING = {
 ## Token ID
 SIGNAL_TOKEN_PLACEHOLDER = "<signal>"
 ECG_TOKEN_PREFIX = "signal_"
+RL_TOKENS = ["<think>", "</think>", "<answer>", "</answer>"]
 
 # Encoders
 ECG_ENCODERS = {

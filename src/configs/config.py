@@ -49,6 +49,8 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--distributed", action="store_true", default=None, help="Enable distributed training")
         parser.add_argument("--torch_compile", action="store_true", default=None,
                             help="Torch compile the model (should really only be used during pretraining or large finetuning.)")
+        parser.add_argument("--train_phase", type=str, default="sft", choices=["pretrain", "sft", "rl"],
+                            help="Training phase: pretrain (raw text + bos/signal/eos, no chat template), sft (chat template), rl (sft + think/answer special tokens)")
         parser.add_argument("--llm_input_len", type=int, default=2048, help="LLM Input Sequence Length")
         parser.add_argument("--min_ecg_tokens_len", type=int, default=512, help="Minimum ECG token length to consider")
         parser.add_argument("--norm_eps", type=float, default=1e-6, help="Please choose the normalization epsilon")

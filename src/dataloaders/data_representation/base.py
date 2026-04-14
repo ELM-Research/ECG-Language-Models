@@ -101,6 +101,10 @@ class Base(Dataset):
         return self.llm_tokenizer.decode(cont, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
 
     def create_labels(self, input_ids: list[int]) -> list[int]:
+        if getattr(self.args, "train_phase", "sft") == "pretrain":
+            sig = self.llm_tokenizer.convert_tokens_to_ids(SIGNAL_TOKEN_PLACEHOLDER)
+            pad = self.llm_tokenizer.pad_token_id
+            return [-100 if t in (sig, pad) else t for t in input_ids]
         wt = HF_LLMS[self.args.llm]["watch_tokens"]
         BOS = set(wt["bos_token"].keys() if isinstance(wt["bos_token"], dict) else wt["bos_token"])
         EOS = set(wt["eos_token"].keys() if isinstance(wt["eos_token"], dict) else wt["eos_token"])
@@ -146,6 +150,12 @@ class Base(Dataset):
         self,
         text: str,
     ):
+        if getattr(self.args, "train_phase", "sft") == "pretrain":
+            wt = HF_LLMS[self.args.llm]["watch_tokens"]
+            bos = next(iter(wt["bos_token"].values()))
+            eos = next(iter(wt.get("final_eos_token", wt["eos_token"]).values()))
+            sigs = "" if self.args.perturb == "only_text" else " ".join([SIGNAL_TOKEN_PLACEHOLDER] * self.args.num_encoder_tokens) + "\n"
+            return f"{bos}{sigs}{text}{eos}"
         prompt = self.chat_template.copy()
         turn_count = 0
 
