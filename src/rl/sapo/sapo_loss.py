@@ -13,6 +13,7 @@ def compute_policy_loss_sapo(
     tau_pos: float = 1.0,
     tau_neg: float = 1.05,
     global_batch_size: int = None,
+    dp_size: int = 1,
 ) -> tuple[torch.Tensor, dict[str, Any]]:
     """
     Compute the smoothed policy objective and related metrics for SAPO.
@@ -32,14 +33,6 @@ def compute_policy_loss_sapo(
             Aggregation mode for `agg_loss`. For SAPO, it is recommended to use "seq-mean-token-mean".
     """
 
-    # temperature for positive and negative token updates
-    tau_pos = torch.as_tensor(tau_pos, dtype=advantages.dtype, device=advantages.device)
-    tau_neg = torch.as_tensor(tau_neg, dtype=advantages.dtype, device=advantages.device)
-
-    def gate_function(x, tau):
-        """The gating function used in SAPO"""
-        return torch.sigmoid(tau * (x - 1.0)) * (4.0 / tau)
-
     # compute IS at token level:
     # r_{i,t}(θ) = π_θ(y_{i,t}|x, y_{i,<t}) / π_θold(y_{i,t}|x, y_{i,<t})]
     # In log space: log(r_{i,t}(θ)) = log_prob - ol_log_prob
@@ -50,14 +43,10 @@ def compute_policy_loss_sapo(
     ratio = torch.exp(negative_approx_kl)
 
     # tau_{i,t} is tau_pos if adv > 0 else tau_neg
-    taus = torch.where(
-        condition=advantages > 0,
-        input=tau_pos,  # if A_{i,t} > 0 we set to tau_pos
-        other=tau_neg,  # if A_{i,t} <= 0 we set to tau_neg
-    )
+    taus = torch.where(advantages > 0, tau_pos, tau_neg)
 
     # compute the gates f_{i,t}(r_{i,t}(θ)) at token level
-    gates = gate_function(ratio, taus)
+    gates = torch.sigmoid(taus * (ratio - 1.0)) * (4.0 / taus)
 
     # compute policy gradient loss
     pg_losses = -gates * advantages
@@ -69,19 +58,12 @@ def compute_policy_loss_sapo(
     # for SAPO, we need to aggregate the loss at the sequence level (seq-mean-token-mean)
     pg_loss = agg_loss(
         loss_mat=pg_losses, loss_mask=response_mask,
-        loss_agg_mode=loss_agg_mode, global_batch_size = global_batch_size
+        loss_agg_mode=loss_agg_mode, global_batch_size=global_batch_size, dp_size=dp_size
     )
 
-    # For compatibility, return zero for both pg_clipfrac and pg_clipfrac_lower (not used in SAPO)
-    pg_clipfrac = torch.tensor(0.0, device=pg_loss.device)
-    pg_clipfrac_lower = torch.tensor(0.0, device=pg_loss.device)
     # compute KL for metrics tracking
     ppo_kl = masked_mean(-negative_approx_kl, response_mask)
     # return metrics dict
-    pg_metrics = {
-        "actor/pg_clipfrac": pg_clipfrac.detach().item(),
-        "actor/ppo_kl": ppo_kl.detach().item(),
-        "actor/pg_clipfrac_lower": pg_clipfrac_lower.detach().item(),
-    }
+    pg_metrics = {"actor/ppo_kl": ppo_kl.detach().item()}
 
     return pg_loss, pg_metrics

@@ -50,4 +50,5 @@ def compute_rl_loss(batch: dict[str, Any], model_out: Any, args: Any) -> tuple[t
         tau_pos=args.sapo_tau_pos,
         tau_neg=args.sapo_tau_neg,
         global_batch_size=args.batch_size * max(1, int(getattr(args, "world_size", 1))),
+        dp_size=max(1, int(getattr(args, "world_size", 1))),
     )
