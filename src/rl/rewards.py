@@ -1,7 +1,7 @@
 """Minimal reward functions for ECG RL: format (think/answer tags) + answer overlap."""
 import re
 
-_FORMAT_RE = re.compile(r"<think>.*?</think>\s*<answer>.*?</answer>", re.DOTALL)
+_FORMAT_RE = re.compile(r"^\s*<think>[\s\S]*?</think>\s*<answer>[\s\S]*?</answer>\s*$")
 _ANSWER_RE = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
 
 
@@ -11,7 +11,7 @@ def _extract_answer(text: str) -> str:
 
 
 def format_reward(text: str) -> float:
-    return 1.0 if _FORMAT_RE.search(text) else 0.0
+    return 1.0 if _FORMAT_RE.fullmatch(text) else 0.0
 
 
 def answer_reward(text: str, gt: str) -> float:

@@ -32,22 +32,16 @@ def compute_policy_loss_sapo(
             Aggregation mode for `agg_loss`. For SAPO, it is recommended to use "seq-mean-token-mean".
     """
 
-    # temperature for positive and negative token updates
+    if tau_pos <= 0 or tau_neg <= 0:
+        raise ValueError(f"tau_pos and tau_neg must be > 0, got tau_pos={tau_pos}, tau_neg={tau_neg}")
     tau_pos = torch.as_tensor(tau_pos, dtype=advantages.dtype, device=advantages.device)
     tau_neg = torch.as_tensor(tau_neg, dtype=advantages.dtype, device=advantages.device)
-
-    def gate_function(x, tau):
-        """The gating function used in SAPO"""
-        return torch.sigmoid(tau * (x - 1.0)) * (4.0 / tau)
 
     # compute IS at token level:
     # r_{i,t}(θ) = π_θ(y_{i,t}|x, y_{i,<t}) / π_θold(y_{i,t}|x, y_{i,<t})]
     # In log space: log(r_{i,t}(θ)) = log_prob - ol_log_prob
-    negative_approx_kl = log_prob - old_log_prob
-    # Clamp negative_approx_kl for stability
-    negative_approx_kl = torch.clamp(negative_approx_kl, min=-20.0, max=20.0)
-    # finally exp() to remove log and get r_{i,t}(θ)
-    ratio = torch.exp(negative_approx_kl)
+    negative_approx_kl = (log_prob - old_log_prob).clamp(min=-20.0, max=20.0)
+    ratio = negative_approx_kl.exp()
 
     # tau_{i,t} is tau_pos if adv > 0 else tau_neg
     taus = torch.where(
@@ -56,8 +50,7 @@ def compute_policy_loss_sapo(
         other=tau_neg,  # if A_{i,t} <= 0 we set to tau_neg
     )
 
-    # compute the gates f_{i,t}(r_{i,t}(θ)) at token level
-    gates = gate_function(ratio, taus)
+    gates = torch.sigmoid(taus * (ratio - 1.0)) * (4.0 / taus)
 
     # compute policy gradient loss
     pg_losses = -gates * advantages

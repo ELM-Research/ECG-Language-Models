@@ -24,12 +24,11 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
     loss_fn = get_rl_loss(args.rl_algo)
     algo_kw = get_loss_kwargs(args.rl_algo, args)
     tokenizer = dataloader.dataset.llm_tokenizer
-    gbs = args.batch_size * args.rl_group_size * get_world_size()
-
     optimizer.zero_grad()
     for step, batch in enumerate(progress):
         batch = {k: batch_to_device(v, device) for k, v in batch.items()}
         B = batch["elm_input_ids"].shape[0]
+        gbs = B * args.rl_group_size * get_world_size()
         step_loss, step_reward, last_metrics = 0.0, 0.0, {}
         for i in range(B):
             ro = rollout_group(nn, batch, i, tokenizer, args)
