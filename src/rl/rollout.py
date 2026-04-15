@@ -76,30 +76,32 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
 
     was_training = base.training
     base.eval()
-    with torch.no_grad():
-        gen = base.generate(**pb, max_new_tokens=args.rl_max_new_tokens,
-                            do_sample=True, temperature=args.rl_temperature, top_p=args.rl_top_p)
-    if was_training:
-        base.train()
+    try:
+        with torch.no_grad():
+            gen = base.generate(**pb, max_new_tokens=args.rl_max_new_tokens,
+                                do_sample=True, temperature=args.rl_temperature, top_p=args.rl_top_p)
 
-    new_tokens = gen[:, pL:] if gen.shape[1] > pL and torch.equal(gen[0, :pL], prompt_ids) else gen
-    if new_tokens.shape[1] == 0:                                 # pathological: nothing generated
-        new_tokens = torch.full((G, 1), int(tokenizer.pad_token_id), dtype=torch.long, device=device)
+            new_tokens = gen[:, pL:] if gen.shape[1] > pL and torch.equal(gen[0, :pL], prompt_ids) else gen
+            if new_tokens.shape[1] == 0:                                 # pathological: nothing generated
+                new_tokens = torch.full((G, 1), int(tokenizer.pad_token_id), dtype=torch.long, device=device)
 
-    eos_ids = _eos_set(args.llm)
-    resp_mask = _trim_mask(new_tokens, eos_ids)                  # (G, gen_len)
+            eos_ids = _eos_set(args.llm)
+            resp_mask = _trim_mask(new_tokens, eos_ids)                  # (G, gen_len)
 
-    rewards = torch.tensor(
-        [compute_reward(tokenizer.decode(new_tokens[i][resp_mask[i].bool()],
-                                         skip_special_tokens=True).strip(), gt_text)
-         for i in range(G)], dtype=torch.float32, device=device)
-    adv = ((rewards - rewards.mean()) / (rewards.std() + 1e-6)).unsqueeze(1).expand_as(resp_mask)
+            rewards = torch.tensor(
+                [compute_reward(tokenizer.decode(new_tokens[i][resp_mask[i].bool()],
+                                                 skip_special_tokens=True).strip(), gt_text)
+                 for i in range(G)], dtype=torch.float32, device=device)
+            adv = ((rewards - rewards.mean()) / (rewards.std() + 1e-6)).unsqueeze(1).expand_as(resp_mask)
 
-    full_ids = torch.cat([pb["elm_input_ids"], new_tokens], dim=1)
-    full_attn = torch.cat([pb["elm_attention_mask"], resp_mask], dim=1)
-    with torch.no_grad():
-        old_lp = _log_prob_at_response(base, full_ids, full_attn,
-                                       pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL)
+            full_ids = torch.cat([pb["elm_input_ids"], new_tokens], dim=1)
+            full_attn = torch.cat([pb["elm_attention_mask"], resp_mask], dim=1)
+            # old_log_prob must match the behavioral distribution used by generate() (eval mode).
+            old_lp = _log_prob_at_response(base, full_ids, full_attn,
+                                           pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL)
+    finally:
+        if was_training:
+            base.train()
 
     return {
         "full_ids": full_ids, "full_attn": full_attn,
