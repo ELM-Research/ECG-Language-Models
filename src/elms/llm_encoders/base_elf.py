@@ -31,13 +31,14 @@ class BaseElf(nn.Module):
                        elm_labels = elm_labels)
         return out
 
-    def generate(self, elm_input_ids, encoder_tokenizer_out, elm_attention_mask, signal_id_indices):
+    def generate(self, elm_input_ids, encoder_tokenizer_out, elm_attention_mask, signal_id_indices, **gen_kwargs):
         projected_embeds = self.get_projections(**encoder_tokenizer_out)
         llm_embeddings = self.llm.get_llm_embeddings(elm_input_ids)
         elm_inputs_embeds = self.inject_projected_embeds(llm_embeddings, projected_embeds, signal_id_indices)
         out = self.llm.generate(elm_input_ids = None,
                                 elm_inputs_embeds = elm_inputs_embeds,
-                                elm_attention_mask = elm_attention_mask)
+                                elm_attention_mask = elm_attention_mask,
+                                **gen_kwargs)
         return out
 
     def get_projections(self, ecg_signal):

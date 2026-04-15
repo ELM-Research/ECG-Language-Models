@@ -21,7 +21,7 @@ class Qwen25(nn.Module):
         return out
 
     def generate(self, elm_input_ids, elm_attention_mask,
-                 elm_inputs_embeds= None, max_new_tokens=128):
+                 elm_inputs_embeds= None, max_new_tokens=128, **gen_kwargs):
         return self.llm.generate(
                 input_ids=elm_input_ids,
                 inputs_embeds = elm_inputs_embeds,
@@ -29,4 +29,5 @@ class Qwen25(nn.Module):
                 max_new_tokens=max_new_tokens,
                 pad_token_id=self.pad_token_id,
                 eos_token_id=self.eos_token_id,
+                **gen_kwargs,
             )
