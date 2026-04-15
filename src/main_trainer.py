@@ -8,6 +8,7 @@ from dataloaders.build_dataloader import BuildDataLoader
 from elms.build_elm import BuildELM
 
 from runners.trainer import run_train
+from runners.rl_trainer import run_rl_train
 
 from utils.checkpoint_manager import CheckpointManager
 from utils.seed_manager import set_seed
@@ -65,8 +66,9 @@ def main():
         start_epoch = 0
         if args.resume_ckpt and checkpoint_manager:
             start_epoch = checkpoint_manager.resume_checkpoint(args.resume_ckpt, elm, optimizer)
+        runner = run_rl_train if getattr(args, "train_phase", "sft") == "rl" else run_train
         for epoch in range(start_epoch, args.epochs):
-            train_result = run_train(elm, optimizer, dataloader, epoch, args, checkpoint_manager)
+            train_result = runner(elm, optimizer, dataloader, epoch, args, checkpoint_manager)
             should_stop = False
             if checkpoint_manager and is_main():
                 if checkpoint_manager.save_epoch(train_result["average_loss"]):
