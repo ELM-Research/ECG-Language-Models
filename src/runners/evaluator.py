@@ -1,3 +1,4 @@
+import re
 import numpy as np
 import scipy.stats as stats
 from tqdm import tqdm
@@ -7,6 +8,15 @@ import string
 from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 from nltk.translate.meteor_score import meteor_score as nltk_meteor
 from rouge_score.rouge_scorer import RougeScorer
+
+_THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+_ANSWER_RE = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
+
+def split_response(text):
+    t, a = _THINK_RE.search(text), _ANSWER_RE.search(text)
+    thinking = t.group(1).strip() if t else ""
+    answer = (a.group(1) if a else text[t.end():] if t else text).strip()
+    return thinking, answer
 
 from utils.gpu_manager import is_main, train_dev_break
 
@@ -307,11 +317,18 @@ def evaluate(elm, dataloader, args):
             # if batch_idx == 10:
             #     break
             # input()
-    results = evaluate_strings(all_refs, all_hyps)
+    refs_t, refs_a = map(list, zip(*map(split_response, all_refs))) if all_refs else ([], [])
+    hyps_t, hyps_a = map(list, zip(*map(split_response, all_hyps))) if all_hyps else ([], [])
+    think_pairs = [(r, h) for r, h in zip(refs_t, hyps_t) if r and h]
+    results = {"answer": evaluate_strings(refs_a, hyps_a)}
+    if think_pairs:
+        results["thinking"] = evaluate_strings(*map(list, zip(*think_pairs)))
     print("\n=== N-Turn Evaluation (generated vs. gold response only) ===")
-    print(f"Pairs: {len(all_refs)}")
-    for k, v in results.items():
-        print(f"{k}: {v:.4f}")
+    print(f"Pairs: {len(all_refs)} (thinking pairs: {len(think_pairs)})")
+    for group, mdict in results.items():
+        print(f"[{group}]")
+        for k, v in mdict.items():
+            print(f"  {k}: {v:.4f}")
     out = {
         "num_pairs": len(all_refs),
         "metrics": results,
@@ -320,7 +337,7 @@ def evaluate(elm, dataloader, args):
         "hypotheses": all_hyps,
     }
     if any(d.startswith("ecg-comp") for d in args.data):
-        per_class_acc, confusion_matrix, other_counts = compute_classification_metrics(all_refs, all_hyps)
+        per_class_acc, confusion_matrix, other_counts = compute_classification_metrics(refs_a, hyps_a)
         print_classification_metrics(per_class_acc, confusion_matrix)
         results["per_class_acc"] = per_class_acc
         out["confusion_matrix"] = confusion_matrix
