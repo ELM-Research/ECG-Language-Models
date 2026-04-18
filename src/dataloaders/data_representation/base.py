@@ -100,6 +100,12 @@ class Base(Dataset):
         cont = cont[:cut]
         return self.llm_tokenizer.decode(cont, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
 
+    @property
+    def think_prefix_ids(self) -> list[int]:
+        if not hasattr(self, "_think_prefix_ids"):
+            self._think_prefix_ids = self.llm_tokenizer.encode("<think>\n", add_special_tokens=False)
+        return self._think_prefix_ids
+
     def create_labels(self, input_ids: list[int]) -> list[int]:
         if getattr(self.args, "train_phase", "sft") == "pretrain":
             sig = self.llm_tokenizer.convert_tokens_to_ids(SIGNAL_TOKEN_PLACEHOLDER)
@@ -116,6 +122,8 @@ class Base(Dataset):
         in_resp = False
         START = wt["response_start"]["order"]
         k = len(START)
+        TP = self.think_prefix_ids if getattr(self.args, "explicit_thinking", False) else []
+        kt = len(TP)
 
         while i < L:
             tok = input_ids[i]
@@ -125,6 +133,8 @@ class Base(Dataset):
                 if i + k <= L and input_ids[i : i + k] == START:
                     i += k
                     in_resp = True
+                    if kt and i + kt <= L and input_ids[i : i + kt] == TP:
+                        i += kt
                     continue
             if in_resp:
                 labels[i] = tok
@@ -303,10 +313,10 @@ class Base(Dataset):
         wt = HF_LLMS[self.args.llm]["watch_tokens"]
         START = wt["response_start"]["order"]
         EOS = set(wt["eos_token"].keys() if isinstance(wt["eos_token"], dict) else wt["eos_token"])
-
-        k = len(START)
+        TP = list(self.think_prefix_ids) if getattr(self.args, "explicit_thinking", False) else []
+        valid_prefixes = [START + TP, START] if TP else [START]
         for s, e in ranges:
-            if not (s >= k and input_ids[s - k : s] == START):
-                raise AssertionError(f"Misaligned start at {s}: expected response_start immediately before content.")
+            if not any(s >= len(p) and input_ids[s - len(p) : s] == p for p in valid_prefixes):
+                raise AssertionError(f"Misaligned start at {s}: expected response_start (or response_start + <think>\\n) immediately before content.")
             if not (e - 1 >= 0 and input_ids[e - 1] in EOS):
                 raise AssertionError(f"Missing per-turn EOS at end index {e}.")

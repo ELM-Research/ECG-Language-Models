@@ -13,6 +13,8 @@ _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 _ANSWER_RE = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
 
 def split_response(text):
+    if "</think>" in text and "<think>" not in text:
+        text = "<think>\n" + text  # explicit_thinking: opener was consumed as prompt prefix
     t, a = _THINK_RE.search(text), _ANSWER_RE.search(text)
     thinking = t.group(1).strip() if t else ""
     answer = (a.group(1) if a else text[t.end():] if t else text).strip()

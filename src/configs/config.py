@@ -55,6 +55,8 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--norm_eps", type=float, default=1e-6, help="Please choose the normalization epsilon")
         parser.add_argument("--train_phase", type=str, default="sft", choices=["pretrain", "sft", "rl"],
                             help="Training phase: pretrain (raw text + bos/signal/eos, no chat template), sft (chat template), rl (sft + think/answer special tokens)")
+        parser.add_argument("--explicit_thinking", action="store_true", default=False,
+                            help="Treat <think>\\n as a fixed prompt prefix: mask loss up to and including <think>\\n (SFT); inject it at generation to force thinking.")
     if mode == "train":
         parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "adamw", "muon"], help="Optimizer type")
         parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")

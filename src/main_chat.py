@@ -209,6 +209,8 @@ def main():
         # Add empty assistant turn to signal the model should generate
         prompt.append_message(prompt.roles[1], None)
         prompt_str = prompt.get_prompt()
+        if getattr(args, "explicit_thinking", False):
+            prompt_str += "<think>\n"
 
         # Generate
         with torch.no_grad():
@@ -218,7 +220,8 @@ def main():
             gen_out = elm.generate(**gen_batch, max_new_tokens = 2048)
             response = decode_response(input_ids, gen_out, llm_tokenizer, args)
 
-        conversation_messages.append({"role": "assistant", "content": response})
+        stored = f"<think>\n{response}" if getattr(args, "explicit_thinking", False) else response
+        conversation_messages.append({"role": "assistant", "content": stored})
 
         if ecg_path_display and turn_count == 1:
             print(f"[ECG: {ecg_path_display}]")
