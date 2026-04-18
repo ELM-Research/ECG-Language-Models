@@ -23,20 +23,21 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
     total_steps_per_epoch = len(dataloader)
     loss_fn = get_rl_loss(args.rl_algo)
     algo_kw = get_loss_kwargs(args.rl_algo, args)
+    dp_size = get_world_size()
     tokenizer = dataloader.dataset.llm_tokenizer
 
     optimizer.zero_grad()
     for step, batch in enumerate(progress):
         batch = {k: batch_to_device(v, device) for k, v in batch.items()}
         B = batch["elm_input_ids"].shape[0]
-        gbs = B * args.rl_group_size * get_world_size()
+        gbs = B * args.rl_group_size * dp_size
         step_loss, step_reward, last_metrics = 0.0, 0.0, {}
         for i in range(B):
             ro = rollout_group(nn, batch, i, tokenizer, args)
             log_prob = current_log_prob(nn, ro)
             loss, metrics = loss_fn(old_log_prob=ro["old_log_prob"], log_prob=log_prob,
                                     advantages=ro["advantages"], response_mask=ro["resp_mask"],
-                                    global_batch_size=gbs, **algo_kw)
+                                    global_batch_size=gbs, dp_size=dp_size, **algo_kw)
             (loss / accum_steps).backward()
             print(loss)
             print(ro["mean_reward"])

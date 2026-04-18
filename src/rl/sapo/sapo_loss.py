@@ -13,6 +13,7 @@ def compute_policy_loss_sapo(
     tau_pos: float = 1.0,
     tau_neg: float = 1.05,
     global_batch_size: int = None,
+    dp_size: int = 1,
 ) -> tuple[torch.Tensor, dict[str, Any]]:
     """
     Compute the smoothed policy objective and related metrics for SAPO.
@@ -60,7 +61,7 @@ def compute_policy_loss_sapo(
     # for SAPO, we need to aggregate the loss at the sequence level (seq-mean-token-mean)
     pg_loss = agg_loss(
         loss_mat=pg_losses, loss_mask=response_mask,
-        loss_agg_mode=loss_agg_mode, global_batch_size = global_batch_size
+        loss_agg_mode=loss_agg_mode, global_batch_size=global_batch_size, dp_size=dp_size,
     )
 
     # For compatibility, return zero for both pg_clipfrac and pg_clipfrac_lower (not used in SAPO)
