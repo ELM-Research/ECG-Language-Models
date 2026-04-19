@@ -1,0 +1,3 @@
+[submodule "ecg-reasoning-benchmark"]
+	path = ecg-reasoning-benchmark
+	url = https://github.com/Jwoo5/ecg-reasoning-benchmark
