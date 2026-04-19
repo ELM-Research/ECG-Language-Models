@@ -17,7 +17,6 @@ if SRC_DIR not in sys.path:
 from elms.build_elm import BuildELM
 from main_chat import build_chat_template, build_tokenizer, decode_response, prepare_generation_input
 
-
 def _pick_option(text: str, options: list[str]) -> str:
     norm = lambda s: " ".join(s.lower().split())
     t = norm(text)
@@ -114,9 +113,10 @@ class ECGLMModel(BaseModel):
         return False
 
 
-def install_models_shim():
+def install_models_shim(default_model_kwargs=None):
     import types
 
+    default_model_kwargs = default_model_kwargs or {}
     shim = types.ModuleType("models")
 
     def get_model_name(model):
@@ -125,7 +125,8 @@ def install_models_shim():
     def build_model(model_name: str, **kwargs):
         if model_name != "ecglm":
             raise ValueError(f"Only model='ecglm' is supported by this bridge, got: {model_name}")
-        return ECGLMModel.build_model(**kwargs)
+        merged_kwargs = {**default_model_kwargs, **kwargs}
+        return ECGLMModel.build_model(**merged_kwargs)
 
     shim.BaseModel = BaseModel
     shim.build_model = build_model
@@ -155,10 +156,22 @@ def main():
     parser.add_argument("--device")
     parser.add_argument("--num-encoder-tokens", type=int, default=1)
     args, passthrough = parser.parse_known_args()
+    if passthrough and passthrough[0] == "--":
+        passthrough = passthrough[1:]
+    default_model_kwargs = {
+        "llm": args.llm,
+        "encoder": args.encoder,
+        "elm": args.elm,
+        "elm_ckpt": args.elm_ckpt,
+        "encoder_ckpt": args.encoder_ckpt,
+        "system_prompt": args.system_prompt,
+        "device": args.device,
+        "num_encoder_tokens": args.num_encoder_tokens,
+    }
 
     if args.erb_dir not in sys.path:
         sys.path.insert(0, args.erb_dir)
-    install_models_shim()
+    install_models_shim(default_model_kwargs=default_model_kwargs)
     install_erb_utils_module(args.erb_dir)
     from inference import get_parser, main as erb_main  # pylint: disable=import-error
 
