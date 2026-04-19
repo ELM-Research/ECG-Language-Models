@@ -16,6 +16,7 @@ if SRC_DIR not in sys.path:
 
 from elms.build_elm import BuildELM
 from main_chat import build_chat_template, build_tokenizer, decode_response, prepare_generation_input
+from configs.constants import SIGNAL_TOKEN_PLACEHOLDER
 
 def _pick_option(text: str, options: list[str]) -> str:
     norm = lambda s: " ".join(s.lower().split())
@@ -32,6 +33,14 @@ def _pick_option(text: str, options: list[str]) -> str:
         if "no" in t:
             return "No"
     return options[0]
+
+
+def _fit_signal_len(ecg: torch.Tensor | None, target_len: int | None) -> torch.Tensor | None:
+    if ecg is None or target_len is None or ecg.shape[-1] == target_len:
+        return ecg
+    if ecg.shape[-1] > target_len:
+        return ecg[..., :target_len]
+    return torch.nn.functional.pad(ecg, (0, target_len - ecg.shape[-1]))
 
 
 class BaseModel:
@@ -96,9 +105,9 @@ class ECGLMModel(BaseModel):
                 msg = f"Question: {turn['question']}\nOptions:\n" + "\n".join(f"- {o}" for o in turn["options"])
                 msg += "\nAnswer with exactly one option text."
                 if first_user:
-                    sig = "<|ecg_signal|> " * self.args.num_encoder_tokens
+                    sig = f"{SIGNAL_TOKEN_PLACEHOLDER} " * self.args.num_encoder_tokens
                     msg = f"{sig.strip()}\n{msg}"
-                    ecg = turn.get("signal")
+                    ecg = _fit_signal_len(turn.get("signal"), self.args.segment_len)
                     first_user = False
                 prompt.append_message(prompt.roles[0], msg)
             else:
