@@ -116,7 +116,7 @@ class ECGLMModel(BaseModel):
         prompt_str = prompt.get_prompt()
         with torch.no_grad():
             batch, in_ids = prepare_generation_input(prompt_str, self.tokenizer, ecg, self.args, self.device)
-            out = self.elm.generate(**batch, max_new_tokens=kwargs.get("max_new_tokens", 32))
+            out = self.elm.generate(**batch, max_new_tokens=kwargs.get("max_new_tokens", 1024))
         text = decode_response(in_ids, out, self.tokenizer, self.args)
         return _pick_option(text, conversation.conversation[-1]["options"])
 
