@@ -387,4 +387,5 @@ uv run scripts/erb_minimal.py \
 
 Notes:
 - The adapter registers a new ERB model name: `ecglm`.
+- It injects a tiny `models` shim at runtime, so ERB does **not** need to import/install all baseline model dependencies for this path.
 - It keeps ERB's evaluation flow unchanged (same JSON output structure), so you can run ERB's `evaluation.py` as-is.
