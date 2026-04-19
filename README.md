@@ -6,21 +6,6 @@
   <img src="./assets/fig1_2.png" alt="Our pipeline.">
 </div>
 
-## News
-- **[February 23, 2026]** We have officially moved from [willxxy/ECG-Bench](https://github.com/willxxy/ECG-Bench/) to [ELM-Researc/ECG-Language-Models](https://github.com/ELM-Research/ECG-Language-Models). There are major updates to the documentation and flow of the code. Please read the documentation and feel free to post any issues!
-
-<!-- <details>
-  <summary><strong>Show Older News</strong></summary>
-
-- **[October 16, 2025]** We have finished the refactor, for new and old users, please refer to the documentation below and the [brief release notes](https://github.com/willxxy/ECG-Bench/releases/tag/0.0.5).
-- **[October 3, 2025]** We are currently going under a big refactor for easier use of the repository. We thank you for your patience and will update once its done!
-- **[October 3, 2025]** We have released our paper [Retrieval-Augmented Generation for Electrocardiogram-Language Models](https://arxiv.org/abs/2510.00261). There is currently a [pull request](https://github.com/willxxy/ECG-Bench/pull/3) for the updated integration of RAG utilized with ELMs in the paper. Feel free to check it out.
-- **[August 5, 2025]** We released official splits of ELM datasets on Hugging Face. Feel free to check them out [here](#hugging-face-dataset-5-fold-stratified-splits)!
-- **[May 24, 2025]** We release our paper ["Signal, Image, or Symbolic: Exploring the Best Input Representation for Electrocardiogram-Language Models Through a Unified Framework"](https://arxiv.org/abs/2505.18847) with some interesting results when comparing input representations and training paradigms for ELMs! Check it out.
-- **[April 5, 2025]** We open source ECG-Bench for training and evaluating ELMs!
-</details> -->
-
-
 ## Overview <a name="overview"></a>
 A research framework for finetuning and evaluating ECG-language models (ELMs). Supports multiple architectures, training objectives, and data representations with distributed training out of the box.
 Prepare datasets with [ECG-Preprocess](https://github.com/ELM-Research/ECG-Preprocess) before use. Additionally, if you want to pretrain an ECG encoder, please view [ECG-Neural-Networks](https://github.com/ELM-Research/ECG-Neural-Networks).
@@ -73,13 +58,16 @@ We support the following datasets in a unified way through datasets from Hugging
 
 | `--data`  | Link        |
 |----------|------------|
-| [ecg-qa-ptbxl-250-2500](https://arxiv.org/abs/2306.15681)  | [willxxy/ecg-qa-ptbxl-250-2500](https://huggingface.co/datasets/willxxy/ecg-qa-ptbxl-250-2500)   |
-| [ecg-qa-mimic-iv-ecg-250-2500](https://arxiv.org/abs/2306.15681) | [willxxy/ecg-qa-mimic-iv-ecg-250-2500](https://huggingface.co/datasets/willxxy/ecg-qa-mimic-iv-ecg-250-2500) |
-| [pretrain-mimic-250-2500](https://arxiv.org/abs/2408.08849)  | [willxxy/pretrain-mimic-250-2500](https://huggingface.co/datasets/willxxy/pretrain-mimic-250-2500)   |
-| [ecg-grounding-250-2500](https://www.arxiv.org/abs/2503.06073)    | [willxxy/ecg-grounding-250-2500](https://huggingface.co/datasets/willxxy/ecg-grounding-250-2500)     |
-| [ecg-instruct-pulse-250-2500](https://arxiv.org/abs/2410.19008)     | [willxxy/ecg-instruct-pulse-250-2500](https://huggingface.co/datasets/willxxy/ecg-instruct-pulse-250-2500)      |
-| [ecg-bench-pulse-250-2500](https://arxiv.org/abs/2410.19008)     | [willxxy/ecg-bench-pulse-250-2500](https://huggingface.co/datasets/willxxy/ecg-bench-pulse-250-2500)      |
-| [ecg-instruct-45k-250-2500](https://arxiv.org/abs/2408.08849)     | [willxxy/ecg-instruct-45k-250-2500](https://huggingface.co/datasets/willxxy/ecg-instruct-45k-250-2500)      |
+| [ECG-QA PTB-XL](https://arxiv.org/abs/2306.15681)  | [willxxy/ecg-qa-ptbxl-250-2500](https://huggingface.co/datasets/willxxy/ecg-qa-ptbxl-250-2500)   |
+| [ECG-QA MIMIC-IV-ECG](https://arxiv.org/abs/2306.15681) | [willxxy/ecg-qa-mimic-iv-ecg-250-2500](https://huggingface.co/datasets/willxxy/ecg-qa-mimic-iv-ecg-250-2500) |
+| [Pretrain Mimic](https://arxiv.org/abs/2408.08849)  | [willxxy/pretrain-mimic-250-2500](https://huggingface.co/datasets/willxxy/pretrain-mimic-250-2500)   |
+| [ECG-Grounding](https://www.arxiv.org/abs/2503.06073)    | [willxxy/ecg-grounding-250-2500](https://huggingface.co/datasets/willxxy/ecg-grounding-250-2500)     |
+| [ECG-Instruct Pulse](https://arxiv.org/abs/2410.19008)     | [willxxy/ecg-instruct-pulse-250-2500](https://huggingface.co/datasets/willxxy/ecg-instruct-pulse-250-2500)      |
+| [ECG-Bench Pulse](https://arxiv.org/abs/2410.19008)     | [willxxy/ecg-bench-pulse-250-2500](https://huggingface.co/datasets/willxxy/ecg-bench-pulse-250-2500)      |
+| [ECG-Instruct 45k](https://arxiv.org/abs/2408.08849)     | [willxxy/ecg-instruct-45k-250-2500](https://huggingface.co/datasets/willxxy/ecg-instruct-45k-250-2500)      |
+| [ECG-QA-CoT](https://github.com/StanfordBDHG/OpenTSLM/tree/main)     | [willxxy/ecg-qa-cot](https://huggingface.co/datasets/willxxy/ecg-qa-cot)      |
+| [ECG-Protocol-Guided-Grounding-CoT RL](https://huggingface.co/datasets/PKUDigitalHealth/ECG-Protocol-Guided-Grounding-CoT/viewer/rl)     | [willxxy/rl-ecg-r1](https://huggingface.co/datasets/willxxy/rl-ecg-r1)    
+| [ECG-Protocol-Guided-Grounding-CoT Base](https://huggingface.co/datasets/PKUDigitalHealth/ECG-Protocol-Guided-Grounding-CoT/viewer/base)     | [willxxy/base-ecg-r1](https://huggingface.co/datasets/willxxy/base-ecg-r1)      |
 
 Note that we support mixing different datasets via specifying multiple datas like so:
 
@@ -108,7 +96,9 @@ We utilize the following pretrained LLMs from HuggingFace.
 | [Llama 3](https://arxiv.org/abs/2407.21783) | `llama-3.2-1b-instruct` |
 | [Gemma 2](https://arxiv.org/abs/2408.00118) | `gemma-2-2b-it` |
 | [Qwen 2.5](https://arxiv.org/abs/2412.15115) | `qwen2.5-7b-instruct` |
+| [Qwen 2.5](https://arxiv.org/abs/2412.15115) | `qwen2.5-3b-instruct` |
 | [Qwen 2.5](https://arxiv.org/abs/2412.15115) | `qwen2.5-1.5b-instruct` |
+| [Qwen 2.5](https://arxiv.org/abs/2412.15115) | `qwen2.5-0.5b-instruct` |
 
 ## Encoders <a name="encoders"></a>
 
@@ -135,7 +125,7 @@ We utilize the following pretrained vision encoders from HuggingFace.
 We implement several ELMs and describe how to train each variant.
 
 ### Llava
-We implement a [Llava-like architecture]((https://arxiv.org/abs/2304.08485)) where we connect the encoder to the LLM with a projection layer.
+We implement a [Llava-like architecture]((https://arxiv.org/abs/2304.08485)) where we connect the encoder to the LLM with a projection layer. We currently have two types of llava architectures: 1) `--elm mlp_llava` and 2) `--elm linear_llava`. As their name suggests, `mlp_llava` uses a small mlp as the projection layer and `linear_llava` uses a single linear layer as the projection layer.
 
 ```bash
 uv run src/main_trainer.py \
@@ -143,7 +133,7 @@ uv run src/main_trainer.py \
   --data_representation $DATA_REPRESENTATION \
   --llm qwen2.5-1.5b-instruct \
   --encoder $ECG_ENCODER or $VISION_ENCODER \
-  --elm llava
+  --elm mlp_llava
 ```
 
 For multi-gpu training, launch the same script like so. This is general to all ELMs.
@@ -156,7 +146,7 @@ uv run torchrun --standalone --nproc_per_node=4 \
   --data_representation $DATA_REPRESENTATION \
   --llm qwen2.5-1.5b-instruct \
   --encoder $ECG_ENCODER or $VISION_ENCODER \
-  --elm llava \
+  --elm mlp_llava \
   --distributed
 ```
 
@@ -168,7 +158,7 @@ uv run src/main_trainer.py \
   --data_representation signal \
   --llm qwen2.5-1.5b-instruct \
   --encoder $ECG_ENCODER \
-  --elm llava \
+  --elm mlp_llava \
   --encoder_ckpt $ENCODER_CHECKPOINT.pt
 ```
 
@@ -180,21 +170,23 @@ uv run src/main_trainer.py \
   --data_representation $DATA_REPRESENTATION \
   --llm qwen2.5-1.5b-instruct \
   --encoder $ECG_ENCODER or $VISION_ENCODER \
-  --elm llava \
+  --elm mlp_llava \
   --update_encoder
 ```
 
 ### Encoder-free
 
-We implement an [encoder-free ELM](https://arxiv.org/abs/2601.18798v1), similar to [Fuyu-8b](https://www.adept.ai/blog/fuyu-8b).
+We implement a family of [encoder-free ELMs](https://arxiv.org/abs/2601.18798v1), similar to [Fuyu-8b](https://www.adept.ai/blog/fuyu-8b). 
 
 ```bash
 uv run src/main_trainer.py \
   --data pretrain-mimic-250-2500 \
   --data_representation signal \
   --llm qwen2.5-1.5b-instruct \
-  --elm fuyu
+  --elm $ELF_MODEL
 ```
+
+where $ELF_MODEL = {`base_elf`, `patch_elf`, `conv_elf`}. `base_elf` flattens a 12-lead ECG signal and projects it via a singe linear layer. `patch_elf` patches the 12-lead ECG signal into non-overlapping segments and each patch gets projected via a linear layer. `conv_elf` builds upon `patch_elf` by inputting the patches into a series of 1d convolution layers.
 
 ### ECG-Byte
 
@@ -209,6 +201,80 @@ uv run src/main_trainer.py \
   --elm ecg_byte
 ```
 
+## Training Pipelines <a name="training-pipelines"></a>
+
+We support three training phases via the `--train_phase` flag. Each phase reuses the same `main_trainer.py` entry point.
+
+| `--train_phase` | Description |
+|-----------------|-------------|
+| `pretrain` | Raw text + `bos/signal/eos` tokens, no chat template. Intended for connector / encoder alignment on large unlabeled corpora. |
+| `sft` | Chat-template supervised finetuning. Use `--explicit_thinking` to mask loss up to `<think>\n` for chain-of-thought style training. |
+| `rl` | RL post-training on top of an SFT checkpoint. Currently supports [SAPO](https://arxiv.org/abs/2505.18847) via `--rl_algo sapo`. |
+
+### Pretrain
+Pretrain the connector (and optionally the encoder / LLM) with raw signal-conditioned text.
+
+```bash
+uv run torchrun --standalone --nproc_per_node=$NPROC \
+  src/main_trainer.py \
+  --train_phase pretrain \
+  --data pretrain-mimic-250-2500 \
+  --data_representation signal \
+  --llm qwen2.5-1.5b-instruct \
+  --encoder st_mem \
+  --elm mlp_llava \
+  --update connector \
+  --optimizer adamw \
+  --lr 5e-4 \
+  --encoder_ckpt $ENCODER_CHECKPOINT.pt \
+  --distributed
+```
+
+### SFT
+Chat-template supervised finetuning on instruction / QA data, starting from a pretrained ELM checkpoint.
+
+```bash
+uv run torchrun --standalone --nproc_per_node=$NPROC \
+  src/main_trainer.py \
+  --train_phase sft \
+  --data ecg-qa-mimic-iv-ecg-250-2500 ecg-instruct-45k-250-2500 \
+  --data_representation signal \
+  --llm qwen2.5-1.5b-instruct \
+  --encoder st_mem \
+  --elm mlp_llava \
+  --update connector llm \
+  --optimizer adamw \
+  --lr 1e-4 \
+  --elm_ckpt $PRETRAIN_CKPT.pt \
+  --distributed
+```
+
+### RL
+Group-relative policy-gradient finetuning (SAPO) on top of an SFT checkpoint. Each prompt is rolled out `--rl_group_size` times and advantages are computed within the group.
+
+```bash
+uv run torchrun --standalone --nproc_per_node=$NPROC \
+  src/main_trainer.py \
+  --train_phase rl \
+  --data rl-ecg-r1 \
+  --data_representation signal \
+  --llm qwen2.5-1.5b-instruct \
+  --encoder st_mem \
+  --elm mlp_llava \
+  --update connector llm \
+  --rl_algo sapo \
+  --rl_group_size 4 \
+  --rl_max_new_tokens 384 \
+  --rl_temperature 0.8 \
+  --rl_top_p 0.95 \
+  --rl_tau_pos 1.0 \
+  --rl_tau_neg 1.05 \
+  --elm_ckpt $SFT_CKPT.pt \
+  --distributed
+```
+
+See `scripts/st_mem_full_training.sh` for an end-to-end pretrain → SFT → RL example.
+
 ## Evaluate
 To evaluate your model, just execute the `main_evaluator.py` file while specifying your trained ELM checkpoint via `--elm_ckpt`:
 
@@ -218,7 +284,7 @@ uv run src/main_evaluator.py \
   --data_representation signal \
   --llm qwen2.5-1.5b-instruct \
   --encoder merl \
-  --elm llava \
+  --elm mlp_llava \
   --encoder_ckpt $ENCODER_CHECKPOINT.pt \
   --elm_ckpt $PATH_TO_ELM_CKPT.pt
 ```
@@ -292,10 +358,10 @@ This work is done in collaboration with the Mario Lemieux Center for Heart Rhyth
 
 We thank Chaojing Duan, Michael A. Rosenberg, Emerson Liu, Ding Zhao, Hyoeun Kang, Wenhao Ding, Haohong Lin, Shiqi Liu, Xiaoyu (Simon) Song, Tony Chen, Atharva Mhaskar, Zhepeng Cen, Yihang Yao, and Dylan Leong for their helpful discussions, feedbacks, and support in developing the initial [ECG-Bench](https://github.com/willxxy/ECG-Bench) which turned into the current ELM repository.
 
-We thank the authors of [ECG-Byte](https://github.com/willxxy/ECG-Byte), [MERL](https://github.com/cheliu-computation/MERL-ICML2024), [ST-MEM](https://github.com/bakqui/ST-MEM), [ECG-QA](https://github.com/Jwoo5/ecg-qa), [ECG-Chat](https://github.com/YubaoZhao/ECG-Chat), [PULSE](https://github.com/AIMedLab/PULSE), and [GEM](https://github.com/lanxiang1017/GEM) for their code and publicly released datasets.
+We thank the authors of [ECG-Byte](https://github.com/willxxy/ECG-Byte), [MERL](https://github.com/cheliu-computation/MERL-ICML2024), [ST-MEM](https://github.com/bakqui/ST-MEM), [ECG-QA](https://github.com/Jwoo5/ecg-qa), [ECG-Chat](https://github.com/YubaoZhao/ECG-Chat), [PULSE](https://github.com/AIMedLab/PULSE), [GEM](https://github.com/lanxiang1017/GEM), [ECG-R1](https://github.com/PKUDigitalHealth/ECG-R1) for their code and publicly released datasets.
 
 Lastly, we thank [HuggingFace](https://huggingface.co/) for providing the APIs for the models.
 
 ## License
 
-MIT, except `st_mem.py`, `mlae.py`, `mtae.py` which are [CC BY-NC 4.0](https://github.com/bakqui/ST-MEM?tab=License-1-ov-file#readme).
+MIT, except all third-party models and datasets used in the repository. Please refer to the third-party model and dataset's corresponding licenses.
