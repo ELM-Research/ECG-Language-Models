@@ -2,6 +2,7 @@
 """Minimal bridge: run ECG-Language-Models on ECG-Reasoning-Benchmark inference.py."""
 
 import argparse
+import importlib.util
 import os
 import sys
 from types import SimpleNamespace
@@ -132,6 +133,16 @@ def install_models_shim():
     sys.modules["models"] = shim
 
 
+def install_erb_utils_module(erb_dir: str):
+    utils_path = os.path.join(erb_dir, "utils.py")
+    spec = importlib.util.spec_from_file_location("utils", utils_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load ERB utils module from: {utils_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sys.modules["utils"] = module
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--erb-dir", default=os.path.join(REPO_ROOT, "ecg-reasoning-benchmark"))
@@ -148,6 +159,7 @@ def main():
     if args.erb_dir not in sys.path:
         sys.path.insert(0, args.erb_dir)
     install_models_shim()
+    install_erb_utils_module(args.erb_dir)
     from inference import get_parser, main as erb_main  # pylint: disable=import-error
 
     erb_args = get_parser().parse_args(passthrough)
