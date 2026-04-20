@@ -56,6 +56,9 @@ def main():
                 with open(examples_path, "w") as ef:
                     json.dump(examples, ef, indent=2)
                 print(f"Saved {len(examples)} eval examples to {examples_path}")
+            del elm, elm_components, build_elm, gpu_setup, dataloader, build_dataloader
+            gc.collect()
+            torch.cuda.empty_cache()
         if "confusion_matrix" in out:
             cm_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}.png")
             save_confusion_matrix_png(out["confusion_matrix"], cm_path)
