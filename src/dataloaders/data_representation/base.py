@@ -164,7 +164,7 @@ class Base(Dataset):
             wt = HF_LLMS[self.args.llm]["watch_tokens"]
             bos = next(iter(wt["bos_token"].values()))
             eos = next(iter(wt.get("final_eos_token", wt["eos_token"]).values()))
-            sigs = "" if self.args.perturb == "only_text" else " ".join([SIGNAL_TOKEN_PLACEHOLDER] * self.args.num_encoder_tokens) + "\n"
+            sigs = "" if self.args.perturb == "only_text" else "".join([SIGNAL_TOKEN_PLACEHOLDER] * self.args.num_encoder_tokens) + "\n"
             return f"{bos}{sigs}{text}{eos}"
         prompt = self.chat_template.copy()
         turn_count = 0
@@ -172,7 +172,7 @@ class Base(Dataset):
         if self.args.perturb == "only_text":
             signal_token_placeholders = ""
         else:
-            signal_token_placeholders = " ".join([SIGNAL_TOKEN_PLACEHOLDER] * self.args.num_encoder_tokens) + "\n"
+            signal_token_placeholders = "".join([SIGNAL_TOKEN_PLACEHOLDER] * self.args.num_encoder_tokens) + "\n"
 
         for turn in text:
             if self.args.dev and is_main():

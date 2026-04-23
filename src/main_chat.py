@@ -153,7 +153,7 @@ def main():
     ecg_path_display = None
     needs_signal = args.elm in ("llava", "base_elm", "patch_elm", "base_elf", "patch_elf")
 
-    signal_placeholder = " ".join([SIGNAL_TOKEN_PLACEHOLDER] * args.num_encoder_tokens) + "\n"
+    signal_placeholder = "".join([SIGNAL_TOKEN_PLACEHOLDER] * args.num_encoder_tokens) + "\n"
 
     print_banner()
 
