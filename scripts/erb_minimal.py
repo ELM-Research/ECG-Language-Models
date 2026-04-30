@@ -68,7 +68,7 @@ class ECGLMModel(BaseModel):
             elm=kwargs["elm"],
             encoder_ckpt=kwargs.get("encoder_ckpt"),
             elm_ckpt=kwargs["elm_ckpt"],
-            num_encoder_tokens=kwargs.get("num_encoder_tokens", 1),
+            num_encoder_tokens=kwargs.get("num_encoder_tokens", 50),
             system_prompt=kwargs.get("system_prompt"),
             segment_len = kwargs.get("segment_len"),
             update = kwargs.get("update"),
@@ -82,6 +82,7 @@ class ECGLMModel(BaseModel):
             leads=list(range(12)),
             norm_eps=1e-6,
             explicit_thinking=False,
+            train_phase= "rl",
         )
         self.args = cfg
         self.tokenizer = build_tokenizer(cfg)
@@ -167,7 +168,7 @@ def main():
     parser.add_argument("--system-prompt", default=os.path.join(SRC_DIR, "dataloaders/system_prompts/system_prompt_think.txt"))
     parser.add_argument("--device")
     parser.add_argument("--segment_len", type=int, default=2500, help="ECG Segment Length")
-    parser.add_argument("--num-encoder-tokens", type=int, default=1)
+    parser.add_argument("--num-encoder-tokens", type=int, default=50)
     parser.add_argument("--update", type=str, nargs="+", default=["connector", "llm"],
                             choices=["encoder", "connector", "llm"], help="Components to update (default: connector llm)")
     parser.add_argument("--perturb", type=str, default=None, choices=["noise", "zeros", "only_text"],
