@@ -109,9 +109,10 @@ class Base(Dataset):
     def create_labels(self, input_ids: list[int]) -> list[int]:
         if getattr(self.args, "train_phase", "sft") == "pretrain":
             sig = self.llm_tokenizer.convert_tokens_to_ids(SIGNAL_TOKEN_PLACEHOLDER)
-            pad = self.llm_tokenizer.pad_token_id
             bos = next(iter(HF_LLMS[self.args.llm]["watch_tokens"]["bos_token"]))
-            return [-100 if t in (sig, pad, bos) else t for t in input_ids]
+            last_sig = max((i for i, t in enumerate(input_ids) if t == sig), default=-1)
+            prefix_end = last_sig + 2 if last_sig >= 0 else (input_ids.index(bos) + 1 if bos in input_ids else 0)
+            return [-100 if i < prefix_end else t for i, t in enumerate(input_ids)]
         wt = HF_LLMS[self.args.llm]["watch_tokens"]
         BOS = set(wt["bos_token"].keys() if isinstance(wt["bos_token"], dict) else wt["bos_token"])
         EOS = set(wt["eos_token"].keys() if isinstance(wt["eos_token"], dict) else wt["eos_token"])
