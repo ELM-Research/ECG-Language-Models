@@ -105,7 +105,7 @@ class ECGLMModel(BaseModel):
                 msg = f"Question: {turn['question']}\nOptions:\n" + "\n".join(f"- {o}" for o in turn["options"])
                 msg += "\nAnswer with exactly one option text."
                 if first_user:
-                    sig = f"{SIGNAL_TOKEN_PLACEHOLDER} " * self.args.num_encoder_tokens
+                    sig = f"{SIGNAL_TOKEN_PLACEHOLDER}" * self.args.num_encoder_tokens
                     msg = f"{sig.strip()}\n{msg}"
                     ecg = _fit_signal_len(turn.get("signal"), self.args.segment_len)
                     first_user = False
