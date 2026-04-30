@@ -10,7 +10,8 @@ from utils.seed_manager import set_seed
 from dataloaders.build_dataloader import BuildDataLoader
 from elms.build_elm import BuildELM
 from runners.evaluator import evaluate, run_statistical_analysis, save_confusion_matrix_png, \
-                                save_other_outputs_histogram_png, save_incorrect_predictions_histogram_png
+                                save_other_outputs_histogram_png, save_incorrect_predictions_histogram_png, \
+                                save_pretrain_breakdown_pngs
 
 def main():
     gc.collect()
@@ -66,6 +67,9 @@ def main():
             save_other_outputs_histogram_png(out["other_output_counts"], other_path, top_k = 10)
         incorrect_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}_incorrect.png")
         save_incorrect_predictions_histogram_png(out["references"], out["hypotheses"], incorrect_path)
+        if "pretrain_breakdown" in out:
+            save_pretrain_breakdown_pngs(out["pretrain_breakdown"],
+                                         results_file.replace(".json", f"{fold}_{seed}_pretrain"))
     statistical_results = run_statistical_analysis(all_metrics)
     with open(results_file, "w") as f:
         json.dump(statistical_results, f, indent=2)

@@ -233,6 +233,70 @@ def run_statistical_analysis(all_seeds_results):
 def index_nested(encoder_tokenizer_out, batch):
     return {k: index_nested(v, batch) if isinstance(v, dict) else v[batch:batch+1] for k, v in encoder_tokenizer_out.items()}
 
+def pretrain_diagnostic_breakdown(refs, hyps):
+    split = lambda s: {x.strip() for x in (s or "").split(";") if x.strip()}
+    matched = missed_inst = extra_inst = only_missed = only_extra = both = other = 0
+    miss_c, extra_c = Counter(), Counter()
+    for r, h in zip(refs, hyps):
+        a, b = split(r), split(h)
+        if not b:
+            other += 1; continue
+        if a == b:
+            matched += 1; continue
+        m, e = a - b, b - a
+        if m: missed_inst += 1; miss_c.update(m)
+        if e: extra_inst += 1; extra_c.update(e)
+        if m and e: both += 1
+        elif m: only_missed += 1
+        else: only_extra += 1
+    n = len(refs)
+    return {"n": n, "matched": matched, "other": other,
+            "not_matched": n - matched - other,
+            "missed_inst": missed_inst, "extra_inst": extra_inst,
+            "only_missed": only_missed, "only_extra": only_extra, "both": both,
+            "top_missed": miss_c.most_common(15), "top_extra": extra_c.most_common(15)}
+
+
+def save_pretrain_breakdown_pngs(b, prefix):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    def _bar(path, labels, vals, colors, title, total=None):
+        fig, ax = plt.subplots(figsize=(14, max(3, 0.7 * len(labels) + 2)))
+        bars = ax.barh(labels, vals, color=colors)
+        ax.set_title(title, fontsize=20)
+        for br, v in zip(bars, vals):
+            txt = f" {v:,} ({v/total:.1%})" if total else f" {v:,}"
+            ax.text(v, br.get_y() + br.get_height()/2, txt, va="center", fontsize=16)
+        ax.tick_params(labelsize=14); ax.spines[["top","right"]].set_visible(False)
+        fig.savefig(path, dpi=120, bbox_inches="tight"); plt.close(fig)
+    n, nm = b["n"], b["not_matched"]
+    _bar(f"{prefix}_match.png", ["Matched", "Not matched", "Other"],
+         [b["matched"], nm, b["other"]], ["#10b981", "#6b7280", "#94a3b8"],
+         f"Per-instance match (N={n:,})", total=n)
+    _bar(f"{prefix}_missed_extra.png", ["Missed", "Extra"],
+         [b["missed_inst"], b["extra_inst"]], ["#ef4444", "#f59e0b"],
+         "Per-instance disagreement (overlapping)")
+    if nm:
+        _bar(f"{prefix}_mismatch_partition.png", ["Only missed", "Only extra", "Both"],
+             [b["only_missed"], b["only_extra"], b["both"]], ["#ef4444", "#f59e0b", "#8b5cf6"],
+             f"Mismatched breakdown (total={nm:,})", total=nm)
+    for fname, data, title, color in [
+        (f"{prefix}_top_missed.png", b["top_missed"], "Top missed statements", "#ef4444"),
+        (f"{prefix}_top_extra.png", b["top_extra"], "Top extra statements", "#f59e0b")]:
+        if not data: continue
+        top = data[::-1]
+        labels, vals = [k[:45] for k, _ in top], [v for _, v in top]
+        fig, ax = plt.subplots(figsize=(14, max(3, 0.5 * len(labels) + 2)))
+        bars = ax.barh(labels, vals, color=color)
+        ax.set_title(title, fontsize=20); ax.tick_params(labelsize=12)
+        ax.spines[["top", "right"]].set_visible(False)
+        for br, v in zip(bars, vals):
+            ax.text(v, br.get_y() + br.get_height()/2, f" {v:,}", va="center", fontsize=14)
+        fig.savefig(fname, dpi=120, bbox_inches="tight"); plt.close(fig)
+    print(f"Saved pretrain breakdown plots to {prefix}_*.png")
+
+
 def save_incorrect_predictions_histogram_png(references, hypotheses, path, top_k=10):
     incorrect = [h for r, h in zip(references, hypotheses) if r != h]
     if not incorrect:
@@ -338,6 +402,13 @@ def evaluate(elm, dataloader, args):
         "references": all_refs,
         "hypotheses": all_hyps,
     }
+    if getattr(args, "train_phase", "sft") == "pretrain" and refs_a:
+        breakdown = pretrain_diagnostic_breakdown(refs_a, hyps_a)
+        out["pretrain_breakdown"] = breakdown
+        print(f"\n=== Pretrain diagnostic breakdown (N={breakdown['n']:,}) ===")
+        print(f"  Matched={breakdown['matched']:,}  Not matched={breakdown['not_matched']:,}  Other={breakdown['other']:,}")
+        print(f"  Missed_inst={breakdown['missed_inst']:,}  Extra_inst={breakdown['extra_inst']:,}")
+        print(f"  Only missed={breakdown['only_missed']:,}  Only extra={breakdown['only_extra']:,}  Both={breakdown['both']:,}")
     if any(d.startswith("ecg-comp") for d in args.data):
         per_class_acc, confusion_matrix, other_counts = compute_classification_metrics(refs_a, hyps_a)
         print_classification_metrics(per_class_acc, confusion_matrix)
