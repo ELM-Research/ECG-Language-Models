@@ -75,7 +75,7 @@ src/main_trainer.py \
 --epochs 10 \
 --grad_clip 1.0 \
 --num_workers 16 \
---distributed \
+--parallel_strategy ddp \
 --peft \
 --torch_compile \
 --wandb
@@ -100,7 +100,7 @@ src/main_trainer.py \
 --epochs 10 \
 --grad_clip 1.0 \
 --num_workers 16 \
---distributed \
+--parallel_strategy ddp \
 --peft \
 --torch_compile \
 --wandb
@@ -123,7 +123,7 @@ src/main_trainer.py \
 --llm_input_len 1024 \
 --epochs 10 \
 --num_workers 16 \
---distributed \
+--parallel_strategy ddp \
 --peft \
 --torch_compile \
 --wandb

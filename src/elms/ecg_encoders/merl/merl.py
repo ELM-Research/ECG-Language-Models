@@ -13,7 +13,6 @@ class MerlConfig:
     seq_len: int = 2500
     lm: str = "ncbi/MedCPT-Query-Encoder"
     resnet_type: str = "resnet101"
-    distributed: bool = False
     spacial_dim: int = None
     d_model: int = 2048
     num_encoder_tokens: int = 1

@@ -410,7 +410,7 @@ class ST_MEM(nn.Module):
         return x
 
     def get_encoder_embeddings(self, ecg_signal):
-        x_latents = self.forward_encoder(ecg_signal.to(torch.float32))
+        x_latents = self.forward_encoder(ecg_signal.to(next(self.parameters()).dtype))
         out = rearrange(x_latents, 'b c n d -> b (c n) d')
         out = out.transpose(1, 2)
         out = self.avgpool(out)

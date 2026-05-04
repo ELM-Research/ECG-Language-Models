@@ -22,6 +22,9 @@ class LLaVA(nn.Module):
             module.train(mode if name in self.update else False)
         return self
 
+    def fsdp_wrap_modules(self):
+        return self.llm.fsdp_wrap_modules()
+
     def forward(self, elm_input_ids, elm_attention_mask, elm_labels, signal_id_indices,
                 encoder_tokenizer_out):
         projected_embeds = self.get_projections(encoder_tokenizer_out)

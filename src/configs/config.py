@@ -47,7 +47,8 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--num_workers", type=int, default=0, help="Please choose the num works for the dataloader")
         parser.add_argument("--wandb", action="store_true", default=None, help="Enable logging")
         parser.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")
-        parser.add_argument("--distributed", action="store_true", default=None, help="Enable distributed training")
+        parser.add_argument("--parallel_strategy", type=str, default=None, choices=["ddp", "fsdp"],
+                            help="Parallel strategy when launched via torchrun. ddp = DistributedDataParallel; fsdp = FSDP2 (per-parameter sharding). Omit for single-device.")
         parser.add_argument("--torch_compile", action="store_true", default=None,
                             help="Torch compile the model (should really only be used during pretraining or large finetuning.)")
         parser.add_argument("--gradient_checkpointing", action="store_true", default=False,

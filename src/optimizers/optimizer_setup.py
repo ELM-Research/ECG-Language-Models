@@ -1,7 +1,9 @@
 import torch
 import numpy as np
 from torch.optim import Adam, AdamW
-from utils.gpu_manager import get_world_size, is_main
+from utils.gpu_manager import is_main
+from utils.parallel_context import get_parallel_context
+from optimizers.muon_distributed import MuonDistributed
 
 
 OPTIMIZERS = {"adam": Adam, "adamw": AdamW}
@@ -64,8 +66,8 @@ class Optimizer:
         self._log_config()
 
     def _world_size(self):
-        ws = get_world_size()
-        if ws == 1 and self.args.distributed:
+        ws = get_parallel_context().dp_size
+        if ws == 1 and self.args.parallel_strategy:
             return max(1, torch.cuda.device_count())
         return ws
 
@@ -99,8 +101,6 @@ class Optimizer:
         )
 
     def _build_muon_optimizer(self, model):
-        from torch.optim import Muon
-
         muon_params = []
         adamw_params = []
 
@@ -126,7 +126,7 @@ class Optimizer:
         self._adamw_lr = adamw_lr
         self._adamw_lr_ratio = adamw_lr_ratio
 
-        muon_opt = Muon(
+        muon_opt = MuonDistributed(
             muon_params,
             lr=self.peak_lr,
             momentum=muon_momentum,

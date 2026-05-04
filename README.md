@@ -147,8 +147,10 @@ uv run torchrun --standalone --nproc_per_node=4 \
   --llm qwen2.5-1.5b-instruct \
   --encoder $ECG_ENCODER or $VISION_ENCODER \
   --elm mlp_llava \
-  --distributed
+  --parallel_strategy ddp
 ```
+
+`--parallel_strategy ddp` uses `DistributedDataParallel` (full model replica per rank). Swap in `--parallel_strategy fsdp` for FSDP2 per-parameter sharding (each rank holds a slice of the LLM's transformer blocks); use this when the LLM is too large to replicate per GPU.
 
 For ECG Encoders, you will have to pretrain your own ECG Encoder using [ecg_nn](https://github.com/ELM-Research/ecg_nn). We plan to release pretrained encoders soon! To load in the pretrained encoder during ELM training run the following:
 
@@ -227,7 +229,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --optimizer adamw \
   --lr 5e-4 \
   --encoder_ckpt $ENCODER_CHECKPOINT.pt \
-  --distributed
+  --parallel_strategy ddp
 ```
 
 ### SFT
@@ -246,7 +248,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --optimizer adamw \
   --lr 1e-4 \
   --elm_ckpt $PRETRAIN_CKPT.pt \
-  --distributed
+  --parallel_strategy ddp
 ```
 
 ### RL
@@ -270,7 +272,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --rl_tau_pos 1.0 \
   --rl_tau_neg 1.05 \
   --elm_ckpt $SFT_CKPT.pt \
-  --distributed
+  --parallel_strategy ddp
 ```
 
 See `scripts/st_mem_full_training.sh` for an end-to-end pretrain → SFT → RL example.
