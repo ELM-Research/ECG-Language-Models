@@ -5,7 +5,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
 from collections.abc import Mapping, Sequence
 
-from utils.gpu_manager import get_world_size, get_rank
+from utils.parallel_context import get_parallel_context
 
 from dataloaders.dataset_mixer import DatasetMixer
 
@@ -53,9 +53,10 @@ class BuildDataLoader:
         self,
         torch_dataset,
     ):
-        if self.args.distributed:
-            sampler = DistributedSampler(torch_dataset, num_replicas=get_world_size(),
-                                         rank=get_rank(), seed=self.args.seed, shuffle=True)
+        if self.args.parallel_strategy:
+            ctx = get_parallel_context()
+            sampler = DistributedSampler(torch_dataset, num_replicas=ctx.dp_size,
+                                         rank=ctx.dp_rank, seed=self.args.seed, shuffle=True)
         else:
             sampler = None
         return sampler

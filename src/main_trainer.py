@@ -30,8 +30,8 @@ def main():
     args.mode = mode
     args.task = "train"
 
-    if args.distributed:
-        init_dist()
+    if args.parallel_strategy:
+        init_dist(args.parallel_strategy)
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -70,12 +70,17 @@ def main():
         for epoch in range(start_epoch, args.epochs):
             train_result = runner(elm, optimizer, dataloader, epoch, args, checkpoint_manager)
             should_stop = False
+            should_save = False
             if checkpoint_manager and is_main():
-                if checkpoint_manager.save_epoch(train_result["average_loss"]):
-                    checkpoint_manager.save_checkpoint(elm, optimizer, epoch, -1, is_best=True, prefix="epoch_")
+                should_save = checkpoint_manager.save_epoch(train_result["average_loss"])
                 if args.early_stopping and checkpoint_manager.stop_early():
                     print(f"Early stopping at epoch {epoch}")
                     should_stop = True
+            # Decision is rank-0-only (best_loss tracking lives there); save
+            # itself must be collective for FSDP get_model_state_dict.
+            should_save = broadcast_value(should_save, src=0)
+            if checkpoint_manager and should_save:
+                checkpoint_manager.save_checkpoint(elm, optimizer, epoch, -1, is_best=True, prefix="epoch_")
             should_stop = broadcast_value(should_stop, src=0)
             if should_stop:
                 break
@@ -84,7 +89,7 @@ def main():
             with open(f"{run_folder}/DONE.txt", "w") as _:
                 pass
     finally:
-        if args.distributed:
+        if args.parallel_strategy:
             cleanup()
         if is_main() and args.wandb:
             cleanup_wandb()

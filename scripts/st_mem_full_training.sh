@@ -16,7 +16,7 @@ COMMON_FLAGS=(
     --grad_clip 1.0
     --llm_input_len 2048
     --num_encoder_tokens 50 \
-    --distributed
+    --parallel_strategy ddp
     --system_prompt "$SYSTEM_PROMPT"
     --llm qwen2.5-3b-instruct
     --gradient_checkpointing

@@ -1,52 +1,53 @@
-import torch, argparse, os, torch.distributed as dist
+"""GPU placement and parallel-strategy dispatch.
+
+Free helpers (`is_main`, `get_world_size`, `init_dist`, ...) are thin shims over
+the global ParallelContext, kept for backward compatibility with call sites
+across the codebase.
+"""
+
+import argparse
+from typing import Iterable
+
+import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+from utils.parallel_context import (
+    ParallelContext,
+    get_parallel_context,
+    init_parallel_context,
+)
 
-def init_dist():
-    if not dist.is_initialized():
-        dist.init_process_group(backend="nccl", init_method="env://")
-    torch.cuda.set_device(get_local_rank())
+
+def init_dist(strategy: str = "ddp") -> ParallelContext:
+    return init_parallel_context(strategy=strategy)
 
 
 def get_local_rank() -> int:
-    return int(os.environ.get("LOCAL_RANK", 0))
+    return get_parallel_context().local_rank
 
 
 def get_rank() -> int:
-    if dist.is_available() and dist.is_initialized():
-        return dist.get_rank()
-    return 0
+    return get_parallel_context().global_rank
 
 
 def get_world_size() -> int:
-    if dist.is_available() and dist.is_initialized():
-        return dist.get_world_size()
-    return 1
+    return get_parallel_context().world_size
 
 
 def is_main() -> bool:
-    return get_rank() == 0
+    return get_parallel_context().is_main
 
 
-def barrier():
-    if dist.is_available() and dist.is_initialized():
-        dist.barrier()
+def barrier() -> None:
+    get_parallel_context().barrier()
 
 
-def cleanup():
-    if dist.is_available() and dist.is_initialized():
-        try:
-            dist.destroy_process_group()
-        except OSError: pass
+def cleanup() -> None:
+    get_parallel_context().cleanup()
 
 
 def broadcast_value(val, src: int = 0):
-    """Broadcast a small Python object (e.g., str/int) without GPU assumptions."""
-    if not (dist.is_available() and dist.is_initialized()):
-        return val
-    obj = [val]
-    dist.broadcast_object_list(obj, src=src)
-    return obj[0]
+    return get_parallel_context().broadcast_value(val, src=src)
 
 
 def train_dev_break(enabled: bool, batch: dict, loss_value: float) -> bool:
@@ -67,29 +68,69 @@ def train_dev_break(enabled: bool, batch: dict, loss_value: float) -> bool:
 class GPUSetup:
     def __init__(self, args: argparse.Namespace):
         self.args = args
+        self.ctx = get_parallel_context()
 
-    def setup_gpu(self, model: torch.nn.Module, find_unused_parameters) -> torch.nn.Module:
+    def setup_gpu(self, model: torch.nn.Module, find_unused_parameters: bool) -> torch.nn.Module:
         device = self.get_device()
         model = model.to(device)
-        if getattr(self.args, "distributed", False):
-            model = DDP(model, device_ids=[device.index], output_device=device.index, find_unused_parameters=find_unused_parameters)
+        strategy = self.ctx.strategy
+        if strategy == "ddp":
+            model = DDP(
+                model,
+                device_ids=[device.index],
+                output_device=device.index,
+                find_unused_parameters=find_unused_parameters,
+            )
+            if self.args.torch_compile:
+                model = torch.compile(model)
+        elif strategy == "fsdp":
+            # FSDP path applies torch.compile per-unit inside _wrap_fsdp.
+            # Compiling the outer FSDP-wrapped model traces through the
+            # pre-forward all-gather hooks and crashes on DTensor params.
+            model = self._wrap_fsdp(model)
+        else:
+            if self.args.torch_compile:
+                model = torch.compile(model)
         if is_main():
-            print(f"find_unused_parameters: {find_unused_parameters}")
-        if self.args.torch_compile:
-            model = torch.compile(model)
+            print(f"[GPUSetup] strategy={strategy} | find_unused_parameters={find_unused_parameters} | torch_compile={self.args.torch_compile}")
         return model
 
-    def get_device(self) -> torch.device:
-        return self.get_multi_device() if getattr(self.args, "distributed", False) else self.get_single_device()
+    def _wrap_fsdp(self, model: torch.nn.Module) -> torch.nn.Module:
+        from torch.distributed.fsdp import fully_shard, MixedPrecisionPolicy
 
-    def get_single_device(self) -> torch.device:
+        mp_policy = MixedPrecisionPolicy(
+            param_dtype=torch.bfloat16,
+            reduce_dtype=torch.float32,
+        )
+        # Megatron / torchtitan / nanotron recipe: keep fp32 master weights
+        # and fp32 optimizer state, run forward + backward in bf16 via the
+        # MixedPrecisionPolicy, and reduce gradients in fp32.
+        # Casting up to fp32 also satisfies FSDP2's "uniform original dtype
+        # per unit" rule: HF LLMs load in bf16 while the encoder/connector
+        # default to fp32, so a single dtype must be chosen — fp32 preserves
+        # the encoder's precision and gives the LLM a master copy to update.
+        model = model.to(torch.float32)
+        dp_mesh = self.ctx.dp_mesh
+        compile_units = self.args.torch_compile
+        for module in self._collect_wrap_modules(model):
+            fully_shard(module, mesh=dp_mesh, mp_policy=mp_policy, reshard_after_forward=True)
+            if compile_units:
+                # Per-unit compile: each FSDP unit's forward is a fresh Dynamo
+                # graph and FSDP's hooks are honoured at the unit boundary.
+                module.compile()
+        fully_shard(model, mesh=dp_mesh, mp_policy=mp_policy, reshard_after_forward=True)
+        return model
+
+    def _collect_wrap_modules(self, model: torch.nn.Module) -> Iterable[torch.nn.Module]:
+        if hasattr(model, "fsdp_wrap_modules"):
+            return list(model.fsdp_wrap_modules())
+        return []
+
+    def get_device(self) -> torch.device:
+        if self.ctx.is_distributed and torch.cuda.is_available():
+            return torch.device(f"cuda:{self.ctx.local_rank}")
         dev = getattr(self.args, "device", None)
         return torch.device(dev or ("cuda" if torch.cuda.is_available() else "cpu"))
-
-    def get_multi_device(self) -> torch.device:
-        if torch.cuda.is_available():
-            return torch.device(f"cuda:{get_local_rank()}")
-        return torch.device("cpu")
 
     def print_model_device(self, model: torch.nn.Module, name: str) -> None:
         if is_main():

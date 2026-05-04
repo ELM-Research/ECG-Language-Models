@@ -14,11 +14,16 @@ class Qwen25(nn.Module):
                         inputs_embeds = elm_inputs_embeds,
                         attention_mask = elm_attention_mask,
                         labels = elm_labels,
-                        output_hidden_states = self.output_hidden_states)
+                        output_hidden_states = self.output_hidden_states,
+                        use_cache = False)
 
     def get_llm_embeddings(self, elm_input_ids):
         out = self.llm.get_input_embeddings()(elm_input_ids.to(self.llm.device))
         return out
+
+    def fsdp_wrap_modules(self):
+        from elms.llms._wrap import get_decoder_layers
+        return get_decoder_layers(self.llm)
 
     def generate(self, elm_input_ids, elm_attention_mask,
                  elm_inputs_embeds= None, max_new_tokens=128, **gen_kwargs):

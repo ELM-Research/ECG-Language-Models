@@ -67,8 +67,7 @@ class BuildEncoder:
 
     def prepare_merl(self,):
         from elms.ecg_encoders.merl.merl import MerlConfig, Merl
-        cfg = MerlConfig(distributed=self.args.distributed,
-                         num_encoder_tokens=self.args.num_encoder_tokens)
+        cfg = MerlConfig(num_encoder_tokens=self.args.num_encoder_tokens)
         model = Merl(cfg)
         return {"encoder": model}
 

@@ -3,14 +3,15 @@ import torch
 from tqdm import tqdm
 import wandb
 
-from utils.gpu_manager import is_main, get_world_size, train_dev_break
+from utils.gpu_manager import is_main, train_dev_break
+from utils.parallel_context import get_parallel_context
 from runners.helper import batch_to_device
 from rl.rl_loss import get_rl_loss, get_loss_kwargs
 from rl.rollout import rollout_group, current_log_prob
 
 
 def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None):
-    if getattr(args, "distributed", False) and hasattr(getattr(dataloader, "sampler", None), "set_epoch"):
+    if getattr(args, "parallel_strategy", None) and hasattr(getattr(dataloader, "sampler", None), "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
     show_progress = is_main()
@@ -23,7 +24,7 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
     total_steps_per_epoch = len(dataloader)
     loss_fn = get_rl_loss(args.rl_algo)
     algo_kw = get_loss_kwargs(args.rl_algo, args)
-    dp_size = get_world_size()
+    dp_size = get_parallel_context().dp_size
     tokenizer = dataloader.dataset.llm_tokenizer
 
     optimizer.zero_grad()
@@ -62,7 +63,9 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
                            "epoch": epoch, **{f"train/{k}": v for k, v in last_metrics.items()}})
             accum_loss_for_log, accum_reward_for_log = 0.0, 0.0
 
-        if args.save_step and checkpoint_manager and is_main():
+        if args.save_step and checkpoint_manager:
+            # save_checkpoint must be collective under FSDP (get_model_state_dict
+            # gathers across ranks); only rank 0 writes the file (gated inside).
             if checkpoint_manager.save_step(step, total_steps_per_epoch):
                 checkpoint_manager.save_checkpoint(nn, optimizer, epoch, step, prefix="step_")
 
