@@ -60,7 +60,7 @@ class BuildLLM:
         hf_llm = self.resize_and_report_embeddings(hf_llm)
         if self.args.gradient_checkpointing:
             hf_llm.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-            hf_llm.config.use_cache = True
+            hf_llm.config.use_cache = False
         if self.args.peft:
             hf_llm = self.build_peft(
                 hf_llm,
