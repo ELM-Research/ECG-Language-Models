@@ -58,11 +58,10 @@ def main():
                                  elm_components["find_unused_parameters"])
         if args.dev:
             gpu_setup.print_model_device(elm, f"LLM: {args.llm} | ENCODER: {args.encoder} |")
-        optimizer = get_optimizer(args, elm)
-        if args.dev:
             checkpoint_manager = None
         else:
             checkpoint_manager = CheckpointManager(run_folder, args)
+        optimizer = get_optimizer(args, elm)
         start_epoch = 0
         if args.resume_ckpt and checkpoint_manager:
             start_epoch = checkpoint_manager.resume_checkpoint(args.resume_ckpt, elm, optimizer)
