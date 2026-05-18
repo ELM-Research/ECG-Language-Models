@@ -59,12 +59,10 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
     nz = (labels != -100).nonzero(as_tuple=True)[0]
     if nz.numel() == 0:
         raise ValueError("No response tokens found (labels all -100).")
-    rs, re_ = nz[0].item(), nz[-1].item() + 1
+    rs = nz[0].item()
 
     prompt_ids = batch["elm_input_ids"][item_idx, :rs]
     prompt_attn = batch["elm_attention_mask"][item_idx, :rs]
-    gt_text = tokenizer.decode(batch["elm_input_ids"][item_idx, rs:re_],
-                               skip_special_tokens=True).strip()
     pL = prompt_ids.shape[0]
 
     pb = {
@@ -90,7 +88,7 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
 
             rewards = torch.tensor(
                 [compute_reward(tokenizer.decode(new_tokens[i][resp_mask[i].bool()],
-                                                 skip_special_tokens=True).strip(), gt_text)
+                                                 skip_special_tokens=True).strip())
                  for i in range(G)], dtype=torch.float32, device=device)
             adv = ((rewards - rewards.mean()) / (rewards.std() + 1e-6)).unsqueeze(1).expand_as(resp_mask)
 
