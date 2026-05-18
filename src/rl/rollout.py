@@ -88,8 +88,7 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
 
             rewards = torch.tensor(
                 [compute_reward(tokenizer.decode(new_tokens[i][resp_mask[i].bool()],
-                                                 skip_special_tokens=True).strip(),
-                                getattr(args, "explicit_thinking", False))
+                                                 skip_special_tokens=True).strip())
                  for i in range(G)], dtype=torch.float32, device=device)
             adv = ((rewards - rewards.mean()) / (rewards.std() + 1e-6)).unsqueeze(1).expand_as(resp_mask)
 
