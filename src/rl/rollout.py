@@ -2,7 +2,7 @@
 import torch
 
 from configs.constants import HF_LLMS
-from rl.rewards import compute_reward
+from rl.rewards import reward_components
 
 
 def _unwrap(m):
@@ -60,7 +60,11 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
     if nz.numel() == 0:
         raise ValueError("No response tokens found (labels all -100).")
     rs = nz[0].item()
-    gt_text = tokenizer.decode(labels[nz], skip_special_tokens=True).strip()
+    # Keep RL control tokens (<think>, </think>, <answer>, </answer>) in the
+    # decoded strings. They are registered as additional special tokens, so
+    # skip_special_tokens=True would strip them and make the format/tag rewards
+    # impossible to earn while also corrupting answer extraction from gt_text.
+    gt_text = tokenizer.decode(labels[nz], skip_special_tokens=False).strip()
 
     prompt_ids = batch["elm_input_ids"][item_idx, :rs]
     prompt_attn = batch["elm_attention_mask"][item_idx, :rs]
@@ -87,12 +91,17 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
             eos_ids = _eos_set(args.llm)
             resp_mask = _trim_mask(new_tokens, eos_ids)                  # (G, gen_len)
 
+            decoded = [
+                tokenizer.decode(new_tokens[i][resp_mask[i].bool()], skip_special_tokens=False).strip()
+                for i in range(G)
+            ]
+            explicit_thinking = getattr(args, "explicit_thinking", False)
+            comp = [reward_components(text, gt_text, explicit_thinking) for text in decoded]
             rewards = torch.tensor(
-                [compute_reward(tokenizer.decode(new_tokens[i][resp_mask[i].bool()],
-                                                 skip_special_tokens=True).strip(), gt_text,
-                                getattr(args, "explicit_thinking", False))
-                 for i in range(G)], dtype=torch.float32, device=device)
-            adv = ((rewards - rewards.mean()) / (rewards.std() + 1e-6)).unsqueeze(1).expand_as(resp_mask)
+                [sum(c.values()) for c in comp], dtype=torch.float32, device=device,
+            )
+            reward_std = rewards.std(unbiased=False)
+            adv = ((rewards - rewards.mean()) / (reward_std + 1e-6)).unsqueeze(1).expand_as(resp_mask)
 
             full_ids = torch.cat([pb["elm_input_ids"], new_tokens], dim=1)
             full_attn = torch.cat([pb["elm_attention_mask"], resp_mask], dim=1)
@@ -108,6 +117,9 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
         "sig_idx": pb["signal_id_indices"], "enc_out": pb["encoder_tokenizer_out"],
         "resp_mask": resp_mask, "advantages": adv, "old_log_prob": old_lp, "pL": pL,
         "mean_reward": rewards.mean().item(),
+        "mean_format_reward": sum(c["format"] for c in comp) / len(comp),
+        "mean_tag_count_reward": sum(c["tag_count"] for c in comp) / len(comp),
+        "mean_answer_reward": sum(c["answer"] for c in comp) / len(comp),
     }
 
 

@@ -15,6 +15,8 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
 
     show_progress = is_main()
     total_loss, total_steps, accum_loss_for_log, accum_reward_for_log = 0.0, 0, 0.0, 0.0
+    accum_format_for_log, accum_tag_for_log, accum_answer_for_log = 0.0, 0.0, 0.0
+    accum_log_steps = 0
     progress = tqdm(dataloader, desc=f"RL[{args.rl_algo}] LLM:{args.llm} Epoch:{epoch}",
                     disable=not show_progress, leave=False)
 
@@ -31,7 +33,7 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
         batch = {k: batch_to_device(v, device) for k, v in batch.items()}
         B = batch["elm_input_ids"].shape[0]
         gbs = B * args.rl_group_size * dp_size
-        step_loss, step_reward, last_metrics = 0.0, 0.0, {}
+        step_loss, step_reward, step_format, step_tag, step_answer, last_metrics = 0.0, 0.0, 0.0, 0.0, 0.0, {}
         for i in range(B):
             ro = rollout_group(nn, batch, i, tokenizer, args)
             log_prob = current_log_prob(nn, ro)
@@ -41,6 +43,9 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
             (loss / accum_steps).backward()
             step_loss += loss.detach().item()
             step_reward += ro["mean_reward"]
+            step_format += ro["mean_format_reward"]
+            step_tag += ro["mean_tag_count_reward"]
+            step_answer += ro["mean_answer_reward"]
             last_metrics = metrics
 
         avg_item_loss = step_loss / B
@@ -48,6 +53,10 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
         total_steps += 1
         accum_loss_for_log += avg_item_loss
         accum_reward_for_log += step_reward / B
+        accum_format_for_log += step_format / B
+        accum_tag_for_log += step_tag / B
+        accum_answer_for_log += step_answer / B
+        accum_log_steps += 1
 
         if (step + 1) % accum_steps == 0 or (step + 1) == total_steps_per_epoch:
             grad_clip = getattr(args, "grad_clip", 0.0)
@@ -57,10 +66,16 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
             optimizer.zero_grad()
 
             if getattr(args, "wandb", False) and is_main():
+                log_denom = max(accum_log_steps, 1)
                 wandb.log({"train/step_loss": accum_loss_for_log, "train/lr": optimizer.learning_rate,
-                           "train/mean_reward": accum_reward_for_log / accum_steps,
+                           "train/mean_reward": accum_reward_for_log / log_denom,
+                           "train/format_reward": accum_format_for_log / log_denom,
+                           "train/tag_count_reward": accum_tag_for_log / log_denom,
+                           "train/answer_reward": accum_answer_for_log / log_denom,
                            "epoch": epoch, **{f"train/{k}": v for k, v in last_metrics.items()}})
             accum_loss_for_log, accum_reward_for_log = 0.0, 0.0
+            accum_format_for_log, accum_tag_for_log, accum_answer_for_log = 0.0, 0.0, 0.0
+            accum_log_steps = 0
 
         if args.save_step and checkpoint_manager and is_main():
             if checkpoint_manager.save_step(step, total_steps_per_epoch):
