@@ -62,10 +62,8 @@ class DatasetMixer:
         if self.args.data_subset:
             n = int(len(data) * self.args.data_subset)
             data = data.shuffle(seed=self.args.seed).select(range(n))
-
         if is_main():
             print("Length of Dataset Considered:", len(data))
-
         return data
 
     def decode_batch(self, batch: dict) -> dict:
