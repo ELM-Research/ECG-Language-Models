@@ -52,14 +52,12 @@ class DatasetMixer:
 
     def build_hf_dataset(self, data_name):
         if self.args.mode in ["train", "post_train"]:
-            data = load_dataset(
-                f"ELM-Research/{data_name}",
-                split=f"fold{self.args.fold}_train",
-            ).with_transform(self.decode_batch)
+            split_name = f"fold{self.args.fold}_train"
         elif self.args.mode in ["eval", "inference"]:
-            data = load_dataset(
+            split_name = f"fold{self.args.fold}_test"
+        data = load_dataset(
                 f"ELM-Research/{data_name}",
-                split=f"fold{self.args.fold}_test",
+                split=split_name,
             ).with_transform(self.decode_batch)
         if self.args.data_subset:
             n = int(len(data) * self.args.data_subset)
