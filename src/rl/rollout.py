@@ -17,8 +17,12 @@ def _eos_set(llm_name: str) -> set:
     return eos | set(fe.keys() if isinstance(fe, dict) else fe)
 
 
-def _trim_mask(new_tokens: torch.Tensor, eos_ids: set) -> torch.Tensor:
-    """Return (G, L) mask = 1 up to and including first EOS per row, 0 after."""
+def _trim_mask(new_tokens: torch.Tensor, eos_ids: set, pad_id: int | None = None) -> torch.Tensor:
+    """Return (G, L) mask = 1 up to and including first EOS per row, 0 after.
+
+    Also zeros pad positions so a row that never emits an EOS (ran to
+    max_new_tokens) cannot leak right-padding into the policy loss.
+    """
     G, L = new_tokens.shape
     mask = torch.ones(G, L, dtype=torch.float32, device=new_tokens.device)
     toks = new_tokens.tolist()
@@ -27,6 +31,8 @@ def _trim_mask(new_tokens: torch.Tensor, eos_ids: set) -> torch.Tensor:
             if toks[i][j] in eos_ids:
                 mask[i, j + 1:] = 0
                 break
+    if pad_id is not None and pad_id not in eos_ids:
+        mask *= (new_tokens != pad_id).float()
     return mask
 
 
@@ -82,27 +88,36 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
     }
 
     was_training = base.training
-    base.eval()
     try:
+        base.eval()
         with torch.no_grad():
             gen = base.generate(**pb, max_new_tokens=args.rl_max_new_tokens,
                                 do_sample=True, temperature=args.rl_temperature, top_p=args.rl_top_p)
 
-            new_tokens = gen[:, pL:] if gen.shape[1] > pL and torch.equal(gen[0, :pL], prompt_ids) else gen
-            if new_tokens.shape[1] == 0:                                 # pathological: nothing generated
-                new_tokens = torch.full((G, 1), int(tokenizer.pad_token_id), dtype=torch.long, device=device)
+        new_tokens = gen[:, pL:] if gen.shape[1] > pL and torch.equal(gen[0, :pL], prompt_ids) else gen
+        if new_tokens.shape[1] == 0:                                 # pathological: nothing generated
+            new_tokens = torch.full((G, 1), int(tokenizer.pad_token_id), dtype=torch.long, device=device)
 
-            resp_mask = _trim_mask(new_tokens, eos_ids)                  # (G, gen_len)
+        resp_mask = _trim_mask(new_tokens, eos_ids, int(tokenizer.pad_token_id))  # (G, gen_len)
 
-            rewards = torch.tensor(
-                [compute_reward(_decode_for_reward(tokenizer, new_tokens[i][resp_mask[i].bool()], strip_ids),
-                                gt_text, getattr(args, "explicit_thinking", False))
-                 for i in range(G)], dtype=torch.float32, device=device)
-            adv = ((rewards - rewards.mean()) / (rewards.std(unbiased=False) + 1e-6)).unsqueeze(1).expand_as(resp_mask)
+        rewards = torch.tensor(
+            [compute_reward(_decode_for_reward(tokenizer, new_tokens[i][resp_mask[i].bool()], strip_ids),
+                            gt_text, getattr(args, "explicit_thinking", False))
+             for i in range(G)], dtype=torch.float32, device=device)
+        reward_std = rewards.std(unbiased=False)
+        # All G samples scored identically: group-relative advantage is pure
+        # 1e-6-scaled noise. Flag so the trainer can skip this prompt.
+        degenerate = bool(reward_std < 1e-6)
+        adv = ((rewards - rewards.mean()) / (reward_std + 1e-6)).unsqueeze(1).expand_as(resp_mask)
 
-            full_ids = torch.cat([pb["elm_input_ids"], new_tokens], dim=1)
-            full_attn = torch.cat([pb["elm_attention_mask"], resp_mask], dim=1)
-            # old_log_prob must match the behavioral distribution used by generate() (eval mode).
+        full_ids = torch.cat([pb["elm_input_ids"], new_tokens], dim=1)
+        full_attn = torch.cat([pb["elm_attention_mask"], resp_mask], dim=1)
+        # Score old_log_prob in the SAME train/eval mode as current_log_prob
+        # (model left in train mode below) so the on-policy SAPO ratio is
+        # exactly 1 and not biased by eval-vs-train numerics.
+        if was_training:
+            base.train()
+        with torch.no_grad():
             old_lp = _log_prob_at_response(base, full_ids, full_attn,
                                            pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL)
     finally:
@@ -113,7 +128,7 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
         "full_ids": full_ids, "full_attn": full_attn,
         "sig_idx": pb["signal_id_indices"], "enc_out": pb["encoder_tokenizer_out"],
         "resp_mask": resp_mask, "advantages": adv, "old_log_prob": old_lp, "pL": pL,
-        "mean_reward": rewards.mean().item(),
+        "mean_reward": rewards.mean().item(), "degenerate": degenerate,
     }
 
 

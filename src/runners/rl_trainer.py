@@ -34,13 +34,15 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
         step_loss, step_reward, last_metrics = 0.0, 0.0, {}
         for i in range(B):
             ro = rollout_group(nn, batch, i, tokenizer, args)
+            step_reward += ro["mean_reward"]
+            if ro["degenerate"]:  # zero intra-group reward variance: advantage is pure noise
+                continue
             log_prob = current_log_prob(nn, ro)
             loss, metrics = loss_fn(old_log_prob=ro["old_log_prob"], log_prob=log_prob,
                                     advantages=ro["advantages"], response_mask=ro["resp_mask"],
                                     global_batch_size=gbs, dp_size=dp_size, **algo_kw)
             (loss / accum_steps).backward()
             step_loss += loss.detach().item()
-            step_reward += ro["mean_reward"]
             last_metrics = metrics
 
         avg_item_loss = step_loss / B
