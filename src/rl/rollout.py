@@ -30,6 +30,11 @@ def _trim_mask(new_tokens: torch.Tensor, eos_ids: set) -> torch.Tensor:
     return mask
 
 
+def _decode_for_reward(tokenizer, ids: torch.Tensor, strip_ids: set) -> str:
+    kept = [int(t) for t in ids.tolist() if int(t) not in strip_ids]
+    return tokenizer.decode(kept, skip_special_tokens=False).strip()
+
+
 def _expand_enc(enc_out: dict, idx: int, G: int) -> dict:
     out = {}
     for k, v in enc_out.items():
@@ -55,12 +60,15 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
     device = batch["elm_input_ids"].device
     G = args.rl_group_size
 
+    eos_ids = _eos_set(args.llm)
+    strip_ids = eos_ids | {int(tokenizer.pad_token_id)}
+
     labels = batch["elm_labels"][item_idx]
     nz = (labels != -100).nonzero(as_tuple=True)[0]
     if nz.numel() == 0:
         raise ValueError("No response tokens found (labels all -100).")
     rs = nz[0].item()
-    gt_text = tokenizer.decode(labels[nz], skip_special_tokens=True).strip()
+    gt_text = _decode_for_reward(tokenizer, labels[nz], strip_ids)
 
     prompt_ids = batch["elm_input_ids"][item_idx, :rs]
     prompt_attn = batch["elm_attention_mask"][item_idx, :rs]
@@ -84,15 +92,13 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
             if new_tokens.shape[1] == 0:                                 # pathological: nothing generated
                 new_tokens = torch.full((G, 1), int(tokenizer.pad_token_id), dtype=torch.long, device=device)
 
-            eos_ids = _eos_set(args.llm)
             resp_mask = _trim_mask(new_tokens, eos_ids)                  # (G, gen_len)
 
             rewards = torch.tensor(
-                [compute_reward(tokenizer.decode(new_tokens[i][resp_mask[i].bool()],
-                                                 skip_special_tokens=True).strip(), gt_text,
-                                getattr(args, "explicit_thinking", False))
+                [compute_reward(_decode_for_reward(tokenizer, new_tokens[i][resp_mask[i].bool()], strip_ids),
+                                gt_text, getattr(args, "explicit_thinking", False))
                  for i in range(G)], dtype=torch.float32, device=device)
-            adv = ((rewards - rewards.mean()) / (rewards.std() + 1e-6)).unsqueeze(1).expand_as(resp_mask)
+            adv = ((rewards - rewards.mean()) / (rewards.std(unbiased=False) + 1e-6)).unsqueeze(1).expand_as(resp_mask)
 
             full_ids = torch.cat([pb["elm_input_ids"], new_tokens], dim=1)
             full_attn = torch.cat([pb["elm_attention_mask"], resp_mask], dim=1)
