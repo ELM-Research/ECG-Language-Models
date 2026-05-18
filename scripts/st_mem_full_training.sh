@@ -119,7 +119,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --llm_input_len 2048 \
   --epochs 3 \
   --rl_algo sapo \
-  --rl_group_size 4 \
+  --rl_group_size 8 \
   --rl_max_new_tokens 512 \
   --rl_temperature 0.8 \
   --rl_top_p 0.95 \
