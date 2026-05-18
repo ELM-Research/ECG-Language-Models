@@ -1,15 +1,44 @@
-"""Reward for ECG RL: correct </think> close + <answer> tag formatting.
+"""Reward for ECG RL: binary + graded tag formatting + multi-label answer F1.
 
-The opening <think> is not rewarded. In explicit mode it is a fixed
-prompt prefix (never generated, and SFT masks it); in non-explicit mode
-a distilled base produces it for free. So the reward only checks that the
-generation closes thinking and emits a well-formed answer block, which
-works identically for both modes.
+The opening <think> is scored only in non-explicit mode. With
+explicit_thinking the opener is a fixed prompt prefix (consumed before
+generation, SFT-masked) so the model never emits it; without it the model
+must produce <think> itself and is rewarded for doing so. The closing
+</think> and the <answer> block are always scored.
+
+answer_reward uses F1 (2|p∩g| / (|p|+|g|)), not recall: recall is maxed by
+emitting every plausible label, which F1 penalizes via precision.
 """
 import re
 
-_FMT = re.compile(r"^\s*[\s\S]*?</think>\s*<answer>[\s\S]*?</answer>\s*$")
+_FMT_X = re.compile(r"^\s*[\s\S]*?</think>\s*<answer>[\s\S]*?</answer>\s*$")
+_FMT_NX = re.compile(r"^\s*<think>[\s\S]*?</think>\s*<answer>[\s\S]*?</answer>\s*$")
+_ANSWER = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
+_TAGS_X = ("</think>", "<answer>", "</answer>")
+_TAGS_NX = ("<think>",) + _TAGS_X
 
 
-def compute_reward(text: str) -> float:
-    return 1.0 if _FMT.fullmatch(text) else 0.0
+def _labels(text: str) -> set:
+    m = _ANSWER.search(text)
+    body = (m.group(1) if m else text).strip().lower()
+    return {x.strip() for x in body.split(";") if x.strip()}
+
+
+def format_reward(text: str, explicit_thinking: bool) -> float:
+    return 1.0 if (_FMT_X if explicit_thinking else _FMT_NX).fullmatch(text) else 0.0
+
+
+def tag_count_reward(text: str, explicit_thinking: bool) -> float:
+    tags = _TAGS_X if explicit_thinking else _TAGS_NX
+    return sum(text.count(t) == 1 for t in tags) / len(tags)
+
+
+def answer_reward(text: str, gt: str) -> float:
+    p, g = _labels(text), _labels(gt)
+    return 2 * len(p & g) / max(len(p) + len(g), 1)
+
+
+def compute_reward(text: str, gt: str, explicit_thinking: bool = True) -> float:
+    return (format_reward(text, explicit_thinking)
+            + tag_count_reward(text, explicit_thinking)
+            + answer_reward(text, gt))
