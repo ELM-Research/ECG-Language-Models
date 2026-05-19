@@ -35,15 +35,17 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
         for i in range(B):
             ro = rollout_group(nn, batch, i, tokenizer, args)
             step_reward += ro["mean_reward"]
-            if ro["degenerate"]:  # zero intra-group reward variance: advantage is pure noise
-                continue
             log_prob = current_log_prob(nn, ro)
             loss, metrics = loss_fn(old_log_prob=ro["old_log_prob"], log_prob=log_prob,
                                     advantages=ro["advantages"], response_mask=ro["resp_mask"],
                                     global_batch_size=gbs, dp_size=dp_size, **algo_kw)
-            (loss / accum_steps).backward()
-            step_loss += loss.detach().item()
-            last_metrics = metrics
+            # Degenerate groups (zero reward variance -> pure-noise advantage)
+            # contribute no gradient, but we keep the forward/backward so every
+            # rank runs identical DDP collectives (skipping deadlocks NCCL).
+            (loss * (0.0 if ro["degenerate"] else 1.0) / accum_steps).backward()
+            if not ro["degenerate"]:
+                step_loss += loss.detach().item()
+                last_metrics = metrics
 
         avg_item_loss = step_loss / B
         total_loss += avg_item_loss
