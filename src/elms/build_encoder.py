@@ -11,8 +11,6 @@ class BuildEncoder:
         self.args = args
 
     def build_encoder(self):
-        encoder_components = None
-
         if self.args.encoder == "merl":
             encoder_components = self.prepare_merl()
         elif self.args.encoder == "mlae":

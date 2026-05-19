@@ -12,7 +12,6 @@ class BuildELM:
         self.args = args
 
     def build_elm(self, llm_tokenizer):
-        elm_components = None
         llm_components = BuildLLM(self.args, llm_tokenizer,).build_llm()
         encoder_components = BuildEncoder(self.args).build_encoder()
         elm_components = ConnectNN(llm_components, encoder_components, self.args).connect_nn()
