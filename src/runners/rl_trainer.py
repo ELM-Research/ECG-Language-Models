@@ -54,7 +54,9 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
         if (step + 1) % accum_steps == 0 or (step + 1) == total_steps_per_epoch:
             grad_clip = getattr(args, "grad_clip", 0.0)
             if grad_clip > 0:
-                torch.nn.utils.clip_grad_norm_((p for p in nn.parameters() if p.grad is not None), grad_clip)
+                params_with_grad = [p for p in nn.parameters() if p.grad is not None]
+                if params_with_grad:
+                    torch.nn.utils.clip_grad_norm_(params_with_grad, grad_clip)
             optimizer.step_and_update_lr()
             optimizer.zero_grad()
 
