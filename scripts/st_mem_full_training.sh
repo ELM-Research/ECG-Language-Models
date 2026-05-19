@@ -5,6 +5,9 @@ set -euo pipefail
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 NPROC=8
 SYSTEM_PROMPT="src/dataloaders/system_prompts/system_prompt_think.txt"
+# RL uses R1-style think/answer data; require the tagged format unconditionally
+# so the format/tag rewards are achievable (the shared prompt makes tags optional).
+RL_SYSTEM_PROMPT="src/dataloaders/system_prompts/system_prompt_rl_think.txt"
 
 
 COMMON_FLAGS=(
@@ -118,11 +121,12 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --ref_global_bs 64 \
   --llm_input_len 2048 \
   --epochs 3 \
+  --system_prompt "$RL_SYSTEM_PROMPT" \
   --rl_algo sapo \
   --rl_group_size 8 \
   --rl_max_new_tokens 512 \
   --rl_temperature 0.8 \
-  --rl_top_p 0.95 \
+  --rl_top_p 1.0 \
   --rl_tau_pos 1.0 \
   --rl_tau_neg 1.05 \
   --rl_loss_agg_mode seq-mean-token-mean \
