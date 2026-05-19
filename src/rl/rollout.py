@@ -51,11 +51,19 @@ def _expand_enc(enc_out: dict, idx: int, G: int) -> dict:
     return out
 
 
-def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int) -> torch.Tensor:
-    """Forward pass → log π(y_t | ...) for t in [pL, total_len). Returns (G, gen_len)."""
+def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int,
+                          temperature: float = 1.0) -> torch.Tensor:
+    """Forward pass → log π(y_t | ...) for t in [pL, total_len). Returns (G, gen_len).
+
+    Logits are divided by the sampling temperature so the scored distribution
+    matches the one rollouts were actually sampled from; otherwise the policy
+    gradient optimises the T=1 distribution using off-distribution samples.
+    """
     out = model(elm_input_ids=ids, elm_attention_mask=attn, elm_labels=None,
                 signal_id_indices=sig_idx, encoder_tokenizer_out=enc_out)
     logits = out.logits[:, pL - 1:-1, :]                       # predictions for positions [pL, total_len)
+    if temperature != 1.0:
+        logits = logits.float() / temperature
     targets = ids[:, pL:]
     return torch.log_softmax(logits.float(), dim=-1).gather(-1, targets.unsqueeze(-1)).squeeze(-1)
 
@@ -119,7 +127,8 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
             base.train()
         with torch.no_grad():
             old_lp = _log_prob_at_response(base, full_ids, full_attn,
-                                           pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL)
+                                           pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL,
+                                           temperature=args.rl_temperature)
     finally:
         if was_training:
             base.train()
@@ -129,9 +138,11 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
         "sig_idx": pb["signal_id_indices"], "enc_out": pb["encoder_tokenizer_out"],
         "resp_mask": resp_mask, "advantages": adv, "old_log_prob": old_lp, "pL": pL,
         "mean_reward": rewards.mean().item(), "degenerate": degenerate,
+        "temperature": float(args.rl_temperature),
     }
 
 
 def current_log_prob(model, ro: dict) -> torch.Tensor:
     """Log-prob of rollout under the current (post-update) policy (keeps DDP graph)."""
-    return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["sig_idx"], ro["enc_out"], ro["pL"])
+    return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["sig_idx"],
+                                 ro["enc_out"], ro["pL"], temperature=ro["temperature"])
