@@ -21,10 +21,9 @@ import torch
 from configs.config import get_args
 from configs.constants import HF_LLMS, SIGNAL_TOKEN_PLACEHOLDER, RL_TOKENS
 from utils.chat_template_manager import get_conv_template
-from utils.gpu_manager import GPUSetup
+from utils.gpu_manager import GPUSetup, batch_to_device
 from utils.seed_manager import set_seed
 from elms.build_elm import BuildELM
-from runners.helper import batch_to_device
 from transformers import AutoTokenizer
 
 

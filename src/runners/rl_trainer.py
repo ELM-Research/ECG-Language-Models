@@ -3,8 +3,7 @@ import torch
 from tqdm import tqdm
 import wandb
 
-from utils.gpu_manager import is_main, get_world_size, train_dev_break
-from runners.helper import batch_to_device
+from utils.gpu_manager import is_main, get_world_size, train_dev_break, batch_to_device
 from rl.rl_loss import get_rl_loss, get_loss_kwargs
 from rl.rollout import rollout_group, current_log_prob
 

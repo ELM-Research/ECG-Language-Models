@@ -1,3 +1,5 @@
+from utils.gpu_manager import is_main, train_dev_break, batch_to_device
+
 import re
 import numpy as np
 import scipy.stats as stats
@@ -19,10 +21,6 @@ def split_response(text):
     thinking = t.group(1).strip() if t else ""
     answer = (a.group(1) if a else text[t.end():] if t else text).strip()
     return thinking, answer
-
-from utils.gpu_manager import is_main, train_dev_break
-
-from runners.helper import batch_to_device
 
 _rouge_scorer = RougeScorer(["rougeL"], use_stemmer=True)
 

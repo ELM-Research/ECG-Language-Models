@@ -2,9 +2,7 @@ import torch
 from tqdm import tqdm
 import wandb
 
-from utils.gpu_manager import is_main, train_dev_break
-from runners.helper import batch_to_device
-
+from utils.gpu_manager import is_main, train_dev_break, batch_to_device
 
 def run_train(
     nn,
