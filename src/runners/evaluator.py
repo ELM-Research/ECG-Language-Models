@@ -40,7 +40,6 @@ def evaluate_strings(references, hypotheses):
             "BLEU-4": 0.0,
             "ROUGE-L": 0.0,
             "METEOR": 0.0,
-            "BERTScore-F1": 0.0,
         }
     valid_refs, valid_hyps = zip(*valid_pairs)
     return {
@@ -49,7 +48,6 @@ def evaluate_strings(references, hypotheses):
         "BLEU-4": calculate_bleu4(valid_refs, valid_hyps),
         "ROUGE-L": calculate_rouge_l(valid_refs, valid_hyps),
         "METEOR": calculate_meteor(valid_refs, valid_hyps),
-        "BERTScore-F1": calculate_bertscore_f1(valid_refs, valid_hyps),
     }
 def _normalize(text):
     text = text.lower()
@@ -84,11 +82,6 @@ def calculate_rouge_l(references, hypotheses):
 
 def calculate_meteor(references, hypotheses):
     return np.mean([nltk_meteor([r.split()], h.split()) for r, h in zip(references, hypotheses)])
-
-def calculate_bertscore_f1(references, hypotheses):
-    from bert_score import score as bert_score
-    _, _, f1 = bert_score(hypotheses, references, lang="en", verbose=False)
-    return f1.mean().item()
 
 def compute_classification_metrics(references, hypotheses):
     valid_classes = set(references)

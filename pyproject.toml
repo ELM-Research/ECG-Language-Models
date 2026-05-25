@@ -32,7 +32,6 @@ dependencies = [
     "jinja2>=3.1.6",
     "nltk>=3.9.4",
     "rouge-score>=0.1.2",
-    "bert-score>=0.3.13",
     "google>=3.0.0",
     "tenacity>=9.1.4",
     "ecg-plot>=0.2.8",
