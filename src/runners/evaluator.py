@@ -184,13 +184,7 @@ def run_statistical_analysis(all_seeds_results):
         if isinstance(metric_values[0], dict):
             statistical_results[metric] = {}
             for sub_metric in metric_values[0].keys():
-                if isinstance(metric_values[0][sub_metric], list):
-                    mean = np.mean(metric_values[0][sub_metric]) * 100
-                    values = [np.mean(result["metrics"][metric][sub_metric]) * 100 for result in all_seeds_results]
-                else:
-                    mean = np.mean(metric_values[0][sub_metric]) * 100
-                    values = [np.mean(result["metrics"][metric][sub_metric]) * 100 for result in all_seeds_results]
-
+                values = [np.mean(result["metrics"][metric][sub_metric]) * 100 for result in all_seeds_results]
                 mean = np.mean(values)
                 std = np.std(values, ddof=1)
                 confidence = 0.95
