@@ -1,5 +1,3 @@
-from utils.gpu_manager import is_main, train_dev_break, batch_to_device
-
 import re
 import numpy as np
 import scipy.stats as stats
@@ -10,6 +8,11 @@ import string
 from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 from nltk.translate.meteor_score import meteor_score as nltk_meteor
 from rouge_score.rouge_scorer import RougeScorer
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+from utils.gpu_manager import is_main, train_dev_break, batch_to_device
 
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 _ANSWER_RE = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
@@ -105,9 +108,6 @@ def compute_classification_metrics(references, hypotheses):
 def save_other_outputs_histogram_png(other_counts, path, top_k=20):
     if not other_counts:
         return
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     items = Counter(other_counts).most_common(top_k)
     labels, counts = zip(*items)
     fig_h = max(3, 0.45 * len(labels) + 1.5)
@@ -143,10 +143,6 @@ def print_classification_metrics(per_class_acc, confusion_matrix):
         print(row)
 
 def save_confusion_matrix_png(confusion_matrix, path):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
     row_classes = list(confusion_matrix.keys())
     col_classes = list(next(iter(confusion_matrix.values())).keys())
     matrix = np.array([[confusion_matrix[r][c] for c in col_classes] for r in row_classes])
@@ -243,9 +239,6 @@ def pretrain_diagnostic_breakdown(refs, hyps):
 
 
 def save_pretrain_breakdown_pngs(b, prefix):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     def _bar(path, labels, vals, colors, title, total=None):
         fig, ax = plt.subplots(figsize=(14, max(3, 0.7 * len(labels) + 2)))
         bars = ax.barh(labels, vals, color=colors)
@@ -286,9 +279,6 @@ def save_incorrect_predictions_histogram_png(references, hypotheses, path, top_k
     incorrect = [h for r, h in zip(references, hypotheses) if r != h]
     if not incorrect:
         return
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     items = Counter(incorrect).most_common(top_k)
     labels, counts = zip(*items)
     labels = [l[:80] + "\u2026" if len(l) > 80 else l for l in labels]
