@@ -1,5 +1,4 @@
 import numpy as np
-import json
 from pathlib import Path
 from typing import Optional, Union, Tuple
 import yaml
@@ -17,18 +16,6 @@ class DirFileManager:
         args_dict = {k: v for k, v in vars(args).items() if not k.startswith("_")}
         with open(f"{save_path}/config.yaml", "w") as f:
             yaml.dump(args_dict, f, default_flow_style=False)
-
-    @staticmethod
-    def open_json(path: Union[str, Path]) -> dict:
-        """Load and parse a JSON file."""
-        with open(path) as f:
-            return json.load(f)
-
-    @staticmethod
-    def save_json(data: dict, path: Union[str, Path]):
-        """Save a dictionary to a JSON file."""
-        with open(path, "w") as f:
-            json.dump(data, f)
 
     @staticmethod
     def open_npy(path: Union[str, Path]) -> np.ndarray:
