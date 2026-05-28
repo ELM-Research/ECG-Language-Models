@@ -21,20 +21,7 @@ class SeparatorStyle(IntEnum):
     ADD_NEW_LINE_SINGLE = auto()
     LLAMA2 = auto()
     LLAMA3 = auto()
-    CHATGLM = auto()
-    CHATML = auto()
-    CHATINTERN = auto()
-    DOLLY = auto()
-    RWKV = auto()
-    PHOENIX = auto()
-    ROBIN = auto()
-    FALCON_CHAT = auto()
-    CHATGLM3 = auto()
-    DEEPSEEK_CHAT = auto()
-    METAMATH = auto()
-    YUAN2 = auto()
     GEMMA = auto()
-    CLLM = auto()
     DEFAULT = auto()
 
 
@@ -157,17 +144,6 @@ class Conversation:
                 else:
                     ret += tag
             return ret
-        if self.sep_style == SeparatorStyle.CHATML:
-            ret = "" if system_prompt == "" else system_prompt + self.sep + "\n"
-            for role, message in self.messages:
-                if message:
-                    if type(message) is tuple:
-                        message, images = message
-                        message = IMAGE_PLACEHOLDER_STR * len(images) + message
-                    ret += role + "\n" + message + self.sep + "\n"
-                else:
-                    ret += role + "\n"
-            return ret
         if self.sep_style == SeparatorStyle.LLAMA3:
             ret = "<|begin_of_text|>"
             if self.system_message:
@@ -180,15 +156,6 @@ class Conversation:
                     ret += f"{message.strip()}<|eot_id|>"
                 else:
                     ret += f"<|start_header_id|>{role}<|end_header_id|>\n\n"
-            return ret
-        if self.sep_style == SeparatorStyle.DEEPSEEK_CHAT:
-            seps = [self.sep, self.sep2]
-            ret = system_prompt
-            for i, (role, message) in enumerate(self.messages):
-                if message:
-                    ret += role + ": " + message + seps[i % 2]
-                else:
-                    ret += role + ":"
             return ret
         if self.sep_style == SeparatorStyle.GEMMA:
             ret = "<bos>"
@@ -390,51 +357,6 @@ register_conv_template(
     ),
 )
 
-# Internlm-chat template
-register_conv_template(
-    Conversation(
-        name="internlm-chat",
-        system_message=(
-            "A chat between a curious <|User|> and an <|Bot|>. "
-            "The <|Bot|> gives helpful, detailed, and polite answers "
-            "to the <|User|>'s questions.\n\n"
-        ),
-        roles=("<|User|>", "<|Bot|>"),
-        sep_style=SeparatorStyle.CHATINTERN,
-        sep="<eoh>",
-        sep2="<eoa>",
-        stop_token_ids=[1, 103028],
-        stop_str="<|User|>",
-    ),
-)
-
-# Mistral template
-# source: https://docs.mistral.ai/llm/mistral-instruct-v0.1#chat-template
-register_conv_template(
-    Conversation(
-        name="mistral",
-        system_template="[INST] {system_message}\n",
-        roles=("[INST]", "[/INST]"),
-        sep_style=SeparatorStyle.LLAMA2,
-        sep=" ",
-        sep2="</s>",
-    ),
-)
-
-# llama2 template
-# reference: https://huggingface.co/blog/codellama#conversational-instructions
-# reference: https://github.com/facebookresearch/llama/blob/1a240688810f8036049e8da36b073f63d2ac552c/llama/generation.py#L212
-register_conv_template(
-    Conversation(
-        name="llama-2",
-        system_template="[INST] <<SYS>>\n{system_message}\n<</SYS>>\n\n",
-        roles=("[INST]", "[/INST]"),
-        sep_style=SeparatorStyle.LLAMA2,
-        sep=" ",
-        sep2=" </s><s>",
-    ),
-)
-
 # llama3 template
 # reference: https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct/blob/main/tokenizer_config.json
 # reference: https://github.com/meta-llama/llama3/blob/0cee08ec68f4cfc0c89fe4a9366d82679aaa2a66/llama/tokenizer.py#L222
@@ -469,19 +391,6 @@ register_conv_template(
     ),
 )
 
-# Deepseek-chat template
-# reference: https://huggingface.co/deepseek-ai/deepseek-llm-67b-chat/blob/main/tokenizer_config.json
-register_conv_template(
-    Conversation(
-        name="deepseek-chat",
-        system_message="<｜begin▁of▁sentence｜>",  # must add a bos token before first message
-        roles=("User", "Assistant"),
-        sep_style=SeparatorStyle.DEEPSEEK_CHAT,
-        sep="\n\n",
-        sep2="<｜end▁of▁sentence｜>",
-        stop_str="<｜end▁of▁sentence｜>",
-    ),
-)
 
 # Gemma
 # reference: https://huggingface.co/google/gemma-7b-it?text=%3Cstart_of_turn%3Euser%0AHow+does+the+brain+work%3F%3Cend_of_turn%3E%0A%3Cstart_of_turn%3Emodel
