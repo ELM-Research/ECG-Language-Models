@@ -24,7 +24,6 @@ class Base(Dataset):
         self.data = data
         self.args = args
         self.fm = DirFileManager()
-        self.normalize_epsilon = 1e-6
         if self.args.llm:
             self.chat_template = self.make_chat_template()
         if self.args.encoder:
@@ -222,7 +221,7 @@ class Base(Dataset):
         drop = set(droppable[:overflow])
         return [t for i, t in enumerate(tokens) if i not in drop][-limit:]
 
-    def split_prompt(self, prompt: str) -> Tuple[str, str]:
+    def split_prompt(self, prompt: str) -> Tuple[List[int], List[int]]:
         splitted_prompt = prompt.split(SIGNAL_TOKEN_PLACEHOLDER, 1)
         before = self.llm_tokenizer.encode(splitted_prompt[0], add_special_tokens=False)
         after = self.llm_tokenizer.encode(splitted_prompt[1], add_special_tokens=False)
