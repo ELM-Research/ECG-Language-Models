@@ -23,6 +23,7 @@ class SeparatorStyle(IntEnum):
     LLAMA3 = auto()
     GEMMA = auto()
     DEFAULT = auto()
+    CHATML = auto()
 
 
 IMAGE_PLACEHOLDER_STR = "$$<image>$$"
@@ -143,6 +144,17 @@ class Conversation:
                         ret += tag + " " + message + seps[i % 2]
                 else:
                     ret += tag
+            return ret
+        if self.sep_style == SeparatorStyle.CHATML:
+            ret = "" if system_prompt == "" else system_prompt + self.sep + "\n"
+            for role, message in self.messages:
+                if message:
+                    if type(message) is tuple:
+                        message, images = message
+                        message = IMAGE_PLACEHOLDER_STR * len(images) + message
+                    ret += role + "\n" + message + self.sep + "\n"
+                else:
+                    ret += role + "\n"
             return ret
         if self.sep_style == SeparatorStyle.LLAMA3:
             ret = "<|begin_of_text|>"
