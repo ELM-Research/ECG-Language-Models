@@ -229,7 +229,7 @@ class Base(Dataset):
     def make_chat_template(
         self,
     ):
-        chat_template = get_conv_template(HF_LLMS[f"{self.args.llm}"]["chat_template"])
+        chat_template = get_conv_template(HF_LLMS[self.args.llm]["chat_template"])
         if HF_LLMS[self.args.llm]["system_prompt"]:
             system_prompt = self.get_system_prompt()
             chat_template.set_system_message(system_prompt)
