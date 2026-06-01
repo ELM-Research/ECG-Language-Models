@@ -321,7 +321,7 @@ def evaluate(elm, dataloader, args):
                 if needs_signal_injection:
                     signal_indices = batch["signal_id_indices"][b]
                     full_encoder_tokenizer_out = index_nested(batch["encoder_tokenizer_out"], b)
-                ranges = dataset.get_response_ranges(full_ids)
+                ranges = dataset.get_response_ranges(batch["elm_labels"][b].tolist())
                 gt_texts = dataset.get_ground_truth_responses(full_ids, ranges)
                 if getattr(args, "dev", False):
                     print(f"\n--- Batch {batch_idx}, Sample {b} ---")

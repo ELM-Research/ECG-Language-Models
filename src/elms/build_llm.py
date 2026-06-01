@@ -3,6 +3,7 @@ from transformers import AutoModelForCausalLM, AutoConfig
 from peft import LoraConfig, TaskType, get_peft_model
 
 from configs.constants import HF_LLMS
+from utils.chat_template_manager import assistant_stop_ids
 from utils.gpu_manager import is_main
 
 
@@ -11,7 +12,8 @@ class BuildLLM:
         self.args = args
         self.llm_tokenizer = llm_tokenizer
         self.pad_token_id = llm_tokenizer.pad_token_id
-        self.eos_token_id = llm_tokenizer.eos_token_id
+        # Stop generation at any assistant turn terminator (e.g. Gemma's <end_of_turn>), derived from the chat template.
+        self.eos_token_id = list(assistant_stop_ids(llm_tokenizer))
 
     def build_llm(
         self,

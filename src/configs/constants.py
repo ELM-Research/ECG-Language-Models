@@ -97,183 +97,32 @@ HF_DATASETS = [
     "ecg-qa-cot",
 ]
 
+# Chat formatting and special-token handling come from each tokenizer's built-in
+# chat template (see utils/chat_template_manager.py), so no per-model template or
+# token-id bookkeeping is needed here.
+_LLM_DEFAULTS = {
+    "native_dtype": torch.bfloat16,
+    "find_unused_parameters": False,
+    "model_hidden_size": None,
+    "output_hidden_states": False,
+    "system_prompt": True,
+}
+
+
+def _llm(model: str, **overrides) -> dict:
+    # fresh tokens_to_add per model so additions (e.g. <signal>) never leak across models
+    return {**_LLM_DEFAULTS, "model": model, "tokenizer": model,
+            "tokens_to_add": {"additional_special_tokens": []}, **overrides}
+
+
 HF_LLMS = {
-    "llama-3.2-3b-instruct": {
-        "model": "meta-llama/Llama-3.2-3B-Instruct",
-        "tokenizer": "meta-llama/Llama-3.2-3B-Instruct",
-        "chat_template": "llama-3",
-        "native_dtype": torch.bfloat16,
-        "tokens_to_add": {
-            "additional_special_tokens": [],
-        },
-        "find_unused_parameters": False,
-        "model_hidden_size": None,
-        "output_hidden_states": False,
-        "system_prompt": True,
-        "role": "assistant",
-        "watch_tokens": {
-            "bos_token": {128000: "<|begin_of_text|>"},
-            "eos_token": {128009: "<|eot_id|>"},
-            "response_start": {
-                "order": [128006, 78191, 128007, 271],
-                128006: "<|start_header_id|>",
-                78191: "assistant",
-                128007: "<|end_header_id|>",
-                271: "ĊĊ",
-            },
-        },
-    },
-    "llama-3.2-1b-instruct": {
-        "model": "meta-llama/Llama-3.2-1B-Instruct",
-        "tokenizer": "meta-llama/Llama-3.2-1B-Instruct",
-        "chat_template": "llama-3",
-        "native_dtype": torch.bfloat16,
-        "tokens_to_add": {
-            "additional_special_tokens": [],
-        },
-        "find_unused_parameters": False,
-        "model_hidden_size": None,
-        "output_hidden_states": False,
-        "system_prompt": True,
-        "role": "assistant",
-        "watch_tokens": {
-            "bos_token": {128000: "<|begin_of_text|>"},
-            "eos_token": {128009: "<|eot_id|>"},
-            "response_start": {
-                "order": [128006, 78191, 128007, 271],
-                128006: "<|start_header_id|>",
-                78191: "assistant",
-                128007: "<|end_header_id|>",
-                271: "ĊĊ",
-            },
-        },
-    },
-    "qwen2.5-7b-instruct": {
-        "model": "Qwen/Qwen2.5-7B-Instruct",
-        "tokenizer": "Qwen/Qwen2.5-7B-Instruct",
-        "chat_template": "qwen-7b-chat",
-        "native_dtype": torch.bfloat16,
-        "tokens_to_add": {
-            "additional_special_tokens": [],
-        },
-        "find_unused_parameters": False,
-        "model_hidden_size": None,
-        "output_hidden_states": False,
-        "system_prompt": True,
-        "role": "assistant",
-        "watch_tokens": {
-            "bos_token": {151644: "<|im_start|>"},
-            "eos_token": {151645: "<|im_end|>"},
-            "response_start": {
-                "order": [151645, 198, 151644, 77091, 198],
-                151645: "<|im_end|>",
-                198: "Ċ",
-                151644: "<|im_start|>",
-                77091: "assistant",
-            },
-        },
-    },
-    "qwen2.5-3b-instruct": {
-        "model": "Qwen/Qwen2.5-3B-Instruct",
-        "tokenizer": "Qwen/Qwen2.5-3B-Instruct",
-        "chat_template": "qwen-7b-chat",
-        "native_dtype": torch.bfloat16,
-        "tokens_to_add": {
-            "additional_special_tokens": [],
-        },
-        "find_unused_parameters": False,
-        "model_hidden_size": None,
-        "output_hidden_states": False,
-        "system_prompt": True,
-        "role": "assistant",
-        "watch_tokens": {
-            "bos_token": {151644: "<|im_start|>"},
-            "eos_token": {151645: "<|im_end|>"},
-            "response_start": {
-                "order": [151645, 198, 151644, 77091, 198],
-                151645: "<|im_end|>",
-                198: "Ċ",
-                151644: "<|im_start|>",
-                77091: "assistant",
-            },
-        },
-    },
-    "qwen2.5-1.5b-instruct": {
-        "model": "Qwen/Qwen2.5-1.5B-Instruct",
-        "tokenizer": "Qwen/Qwen2.5-1.5B-Instruct",
-        "chat_template": "qwen-7b-chat",
-        "native_dtype": torch.bfloat16,
-        "tokens_to_add": {
-            "additional_special_tokens": [],
-        },
-        "find_unused_parameters": False,
-        "model_hidden_size": None,
-        "output_hidden_states": False,
-        "system_prompt": True,
-        "role": "assistant",
-        "watch_tokens": {
-            "bos_token": {151644: "<|im_start|>"},
-            "eos_token": {151645: "<|im_end|>"},
-            "response_start": {
-                "order": [151645, 198, 151644, 77091, 198],
-                151645: "<|im_end|>",
-                198: "Ċ",
-                151644: "<|im_start|>",
-                77091: "assistant",
-            },
-        },
-    },
-    "qwen2.5-0.5b-instruct": {
-        "model": "Qwen/Qwen2.5-0.5B-Instruct",
-        "tokenizer": "Qwen/Qwen2.5-0.5B-Instruct",
-        "chat_template": "qwen-7b-chat",
-        "native_dtype": torch.bfloat16,
-        "tokens_to_add": {
-            "additional_special_tokens": [],
-        },
-        "find_unused_parameters": False,
-        "model_hidden_size": None,
-        "output_hidden_states": False,
-        "system_prompt": True,
-        "role": "assistant",
-        "watch_tokens": {
-            "bos_token": {151644: "<|im_start|>"},
-            "eos_token": {151645: "<|im_end|>"},
-            "response_start": {
-                "order": [151645, 198, 151644, 77091, 198],
-                151645: "<|im_end|>",
-                198: "Ċ",
-                151644: "<|im_start|>",
-                77091: "assistant",
-            },
-        },
-    },
-    "gemma-2-2b-it": {
-        "model": "google/gemma-2-2b-it",
-        "tokenizer": "google/gemma-2-2b-it",
-        "chat_template": "gemma-2",
-        "native_dtype": torch.bfloat16,
-        "tokens_to_add": {
-            "additional_special_tokens": [],
-        },
-        "output_hidden_states": False,
-        "find_unused_parameters": False,
-        "model_hidden_size": None,
-        "system_prompt": False,
-        "role": "model",
-        "watch_tokens": {
-            "bos_token": {2: "<bos>"},
-            "eos_token": {107: "<end_of_turn>"},
-            "final_eos_token": {1: "<eos>"},  # this is the eos but this eos goes at the very end. not used per turn
-            "response_start": {
-                "order": [107, 108, 106, 2516, 108],
-                107: "<end_of_turn>",
-                108: "",  # sort of like Ċ but not printed.
-                106: "<start_of_turn>",
-                2516: "model",
-            },
-        },
-    },
+    "llama-3.2-3b-instruct": _llm("meta-llama/Llama-3.2-3B-Instruct"),
+    "llama-3.2-1b-instruct": _llm("meta-llama/Llama-3.2-1B-Instruct"),
+    "qwen2.5-7b-instruct": _llm("Qwen/Qwen2.5-7B-Instruct"),
+    "qwen2.5-3b-instruct": _llm("Qwen/Qwen2.5-3B-Instruct"),
+    "qwen2.5-1.5b-instruct": _llm("Qwen/Qwen2.5-1.5B-Instruct"),
+    "qwen2.5-0.5b-instruct": _llm("Qwen/Qwen2.5-0.5B-Instruct"),
+    "gemma-2-2b-it": _llm("google/gemma-2-2b-it", system_prompt=False),
 }
 
 VISION_ENCODERS = {

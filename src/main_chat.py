@@ -20,7 +20,7 @@ import torch
 
 from configs.config import get_args
 from configs.constants import HF_LLMS, SIGNAL_TOKEN_PLACEHOLDER, RL_TOKENS
-from utils.chat_template_manager import get_conv_template
+from utils.chat_template_manager import assistant_stop_ids
 from utils.gpu_manager import GPUSetup, batch_to_device
 from utils.seed_manager import set_seed
 from elms.build_elm import BuildELM
@@ -40,13 +40,12 @@ def build_tokenizer(args):
     return llm_tokenizer
 
 
-def build_chat_template(args):
-    """Build the chat template with the system prompt."""
-    chat_template = get_conv_template(HF_LLMS[args.llm]["chat_template"])
+def system_messages(args):
+    """The optional system message, as a (possibly empty) HF chat message list."""
     if HF_LLMS[args.llm]["system_prompt"] and args.system_prompt:
         with open(args.system_prompt, encoding="utf-8") as f:
-            chat_template.set_system_message(f.read())
-    return chat_template
+            return [{"role": "system", "content": f.read()}]
+    return []
 
 
 def load_ecg_signal(ecg_path, args):
@@ -67,9 +66,8 @@ def load_ecg_signal(ecg_path, args):
     return torch.tensor(ecg_signal, dtype=torch.float32)
 
 
-def prepare_generation_input(prompt_str, llm_tokenizer, ecg_tensor, args, device):
-    """Tokenize the prompt and prepare the generation batch."""
-    input_ids = llm_tokenizer.encode(prompt_str, add_special_tokens=False)
+def prepare_generation_input(input_ids, llm_tokenizer, ecg_tensor, args, device):
+    """Prepare the generation batch from already-tokenized prompt ids."""
     attention_mask = [1] * len(input_ids)
 
     signal_token_id = llm_tokenizer.convert_tokens_to_ids(SIGNAL_TOKEN_PLACEHOLDER)
@@ -95,7 +93,7 @@ def prepare_generation_input(prompt_str, llm_tokenizer, ecg_tensor, args, device
     return gen_batch, input_ids
 
 
-def decode_response(input_ids, generated_ids, llm_tokenizer, args):
+def decode_response(input_ids, generated_ids, llm_tokenizer):
     """Extract the generated response text from output token ids."""
     generated_ids = generated_ids[0].cpu().tolist()
     # Slice off the prompt prefix if the model echoes it
@@ -105,12 +103,8 @@ def decode_response(input_ids, generated_ids, llm_tokenizer, args):
     else:
         cont = generated_ids
 
-    # Trim at EOS
-    wt = HF_LLMS[args.llm]["watch_tokens"]
-    eos = set(wt["eos_token"].keys() if isinstance(wt["eos_token"], dict) else wt["eos_token"])
-    fe = wt.get("final_eos_token", ())
-    final_eos = set(fe.keys() if isinstance(fe, dict) else fe)
-    stop_ids = eos | final_eos
+    # Trim at the assistant turn terminator
+    stop_ids = assistant_stop_ids(llm_tokenizer)
     cut = next((i for i, t in enumerate(cont) if t in stop_ids), len(cont))
     cont = cont[:cut]
 
@@ -149,7 +143,7 @@ def main():
     device = next(elm.parameters()).device
     print(f"Model loaded on {device}.")
 
-    chat_template = build_chat_template(args)
+    system = system_messages(args)
     ecg_tensor = None
     ecg_path_display = None
     needs_signal = args.elm in ("mlp_llava", "base_elm", "patch_elm", "base_elf", "patch_elf")
@@ -202,24 +196,20 @@ def main():
         conversation_messages.append({"role": "user", "content": message})
         turn_count += 1
 
-        # Rebuild the full prompt from conversation history
-        prompt = chat_template.copy()
-        for msg in conversation_messages:
-            role = prompt.roles[0] if msg["role"] == "user" else prompt.roles[1]
-            prompt.append_message(role, msg["content"])
-        # Add empty assistant turn to signal the model should generate
-        prompt.append_message(prompt.roles[1], None)
-        prompt_str = prompt.get_prompt()
+        # Rebuild the full prompt from conversation history via the tokenizer's chat template
+        input_ids = llm_tokenizer.apply_chat_template(
+            system + conversation_messages, add_generation_prompt=True, tokenize=True, return_dict=False
+        )
         if getattr(args, "explicit_thinking", False):
-            prompt_str += "<think>\n"
+            input_ids = input_ids + llm_tokenizer.encode("<think>\n", add_special_tokens=False)
 
         # Generate
         with torch.no_grad():
             gen_batch, input_ids = prepare_generation_input(
-                prompt_str, llm_tokenizer, ecg_tensor, args, device
+                input_ids, llm_tokenizer, ecg_tensor, args, device
             )
             gen_out = elm.generate(**gen_batch, max_new_tokens = 2048)
-            response = decode_response(input_ids, gen_out, llm_tokenizer, args)
+            response = decode_response(input_ids, gen_out, llm_tokenizer)
 
         stored = f"<think>\n{response}" if getattr(args, "explicit_thinking", False) else response
         conversation_messages.append({"role": "assistant", "content": stored})

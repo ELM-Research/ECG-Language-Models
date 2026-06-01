@@ -1,20 +1,13 @@
 """Group rollout: per-prompt, sample G trajectories, score, build tensors for policy-loss computation."""
 import torch
 
-from configs.constants import HF_LLMS
+from utils.chat_template_manager import assistant_stop_ids
 from rl.rewards import compute_reward
 
 
 def _unwrap(m):
     m = getattr(m, "_orig_mod", m)
     return m.module if hasattr(m, "module") else m
-
-
-def _eos_set(llm_name: str) -> set:
-    wt = HF_LLMS[llm_name]["watch_tokens"]
-    eos = set(wt["eos_token"].keys() if isinstance(wt["eos_token"], dict) else wt["eos_token"])
-    fe = wt.get("final_eos_token", ())
-    return eos | set(fe.keys() if isinstance(fe, dict) else fe)
 
 
 def _trim_mask(new_tokens: torch.Tensor, eos_ids: set, pad_id: int | None = None) -> torch.Tensor:
@@ -66,7 +59,7 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
     device = batch["elm_input_ids"].device
     G = args.rl_group_size
 
-    eos_ids = _eos_set(args.llm)
+    eos_ids = assistant_stop_ids(tokenizer)
     strip_ids = eos_ids | {int(tokenizer.pad_token_id)}
 
     labels = batch["elm_labels"][item_idx]
