@@ -66,6 +66,11 @@ class Base(Dataset):
         }
 
     ### ELM TRAINING/EVAL/INFERENCE FUNCTIONS ###
+    @staticmethod
+    def id_set(watch_token_entry) -> set:
+        """Token IDs from a watch_tokens entry, which may be an {id: str} dict or a plain id iterable."""
+        return set(watch_token_entry.keys() if isinstance(watch_token_entry, dict) else watch_token_entry)
+
     def slice_continuation(self, prompt_ids: list[int], generated_ids: list[int]) -> list[int]:
         K = len(prompt_ids)
         if len(generated_ids) >= K and generated_ids[:K] == prompt_ids:
@@ -90,9 +95,8 @@ class Base(Dataset):
 
     def get_generated_response_for_turn(self, prompt_input_ids: list[int], generated_ids: list[int]) -> str:
         wt = HF_LLMS[self.args.llm]["watch_tokens"]
-        eos = set(wt["eos_token"].keys() if isinstance(wt["eos_token"], dict) else wt["eos_token"])
-        fe = wt.get("final_eos_token", ())
-        final_eos = set(fe.keys() if isinstance(fe, dict) else fe)
+        eos = self.id_set(wt["eos_token"])
+        final_eos = self.id_set(wt.get("final_eos_token", ()))
         cont = self.slice_continuation(prompt_input_ids, generated_ids)
         stop_ids = eos | final_eos
         cut = next((i for i, t in enumerate(cont) if t in stop_ids), len(cont))
@@ -113,10 +117,9 @@ class Base(Dataset):
             prefix_end = last_sig + 2 if last_sig >= 0 else (input_ids.index(bos) + 1 if bos in input_ids else 0)
             return [-100 if i < prefix_end else t for i, t in enumerate(input_ids)]
         wt = HF_LLMS[self.args.llm]["watch_tokens"]
-        BOS = set(wt["bos_token"].keys() if isinstance(wt["bos_token"], dict) else wt["bos_token"])
-        EOS = set(wt["eos_token"].keys() if isinstance(wt["eos_token"], dict) else wt["eos_token"])
-        fe = wt.get("final_eos_token", ())
-        FINAL_EOS = set(fe.keys() if isinstance(fe, dict) else fe)
+        BOS = self.id_set(wt["bos_token"])
+        EOS = self.id_set(wt["eos_token"])
+        FINAL_EOS = self.id_set(wt.get("final_eos_token", ()))
         labels = [-100] * len(input_ids)
         i, L = 0, len(input_ids)
         seen_bos = False
@@ -308,7 +311,7 @@ class Base(Dataset):
             return
         wt = HF_LLMS[self.args.llm]["watch_tokens"]
         START = wt["response_start"]["order"]
-        EOS = set(wt["eos_token"].keys() if isinstance(wt["eos_token"], dict) else wt["eos_token"])
+        EOS = self.id_set(wt["eos_token"])
         TP = list(self.think_prefix_ids) if getattr(self.args, "explicit_thinking", False) else []
         valid_prefixes = [START + TP, START] if TP else [START]
         for s, e in ranges:
