@@ -320,24 +320,15 @@ You: /ecg $PATH_TO_SAMPLE.npy
 
 After this turn, you can ask any question for N turns and all answers after will be conditioned on this loaded ECG. We do not currently support adding additional ECGs into one conversation.
 
-## Key Flags
-
-| Flag | Description |
-|------|-------------|
-| `--torch_compile` | `torch.compile` the model |
-| `--data_subset` | Use dataset fraction for quick runs |
-| `--augment_ecg` / `--augment_rgb` | Enable augmentations |
-| `--perturb` | `noise`, `zeros`, or `only_text` |
-| `--optimizer` | `adam`, `adamw`, `muon` |
 
 ## Research
-We list the research that has been conducted using this repository. Please feel free to add your own research here!
+We list research projects that have been conducted using this repository. Please feel free to add your own research here!
 
 - [ECG-Byte: A Tokenizer for End-to-End Generative Electrocardiogram Language Modeling
 ](https://arxiv.org/abs/2412.14373)
 - [Signal, Image, or Symbolic: Exploring the Best Input Representation for Electrocardiogram-Language Models Through a Unified Framework](https://arxiv.org/abs/2505.18847)
 - [Retrieval-Augmented Generation for Electrocardiogram-Language Models](https://arxiv.org/abs/2510.00261)
-- [Encoder-Free ECG-Language Models](https://arxiv.org/abs/2601.18798)
+- [Encoder-Free ECG-Language Models](https://arxiv.org/abs/2601.18798v2)
 
 ## Contributions <a name="contributions"></a>
 
