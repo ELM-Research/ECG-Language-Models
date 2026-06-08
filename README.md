@@ -328,7 +328,7 @@ We list research projects that have been conducted using this repository. Please
 ](https://arxiv.org/abs/2412.14373)
 - [Signal, Image, or Symbolic: Exploring the Best Input Representation for Electrocardiogram-Language Models Through a Unified Framework](https://arxiv.org/abs/2505.18847)
 - [Retrieval-Augmented Generation for Electrocardiogram-Language Models](https://arxiv.org/abs/2510.00261)
-- [ELF: A Family of Encoder-Free ECG-Language Models](https://arxiv.org/abs/2601.18798v2)
+- [ELF: A Family of Encoder-Free ECG-Language Models](https://arxiv.org/abs/2601.18798)
 
 ## Contributions <a name="contributions"></a>
 
