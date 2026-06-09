@@ -19,8 +19,9 @@ class DatasetMixer:
     def build_torch_dataset(self, ):
         data = []
         for data_name in self.args.data:
-            if data_name in HF_DATASETS:
-                dataset = self.build_hf_dataset(data_name)
+            if data_name not in HF_DATASETS:
+                raise ValueError(f"Unknown dataset: {data_name}. See HF_DATASETS in src/configs/constants.py.")
+            dataset = self.build_hf_dataset(data_name)
             data.extend(dataset)
         if is_main():
             print(f"Length of Dataset: {len(data)}")
