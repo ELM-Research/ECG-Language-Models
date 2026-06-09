@@ -13,6 +13,7 @@
 ### VIT ###
 from typing import Optional
 from torch import nn
+from torch.nn import functional as F
 from dataclasses import dataclass
 import torch
 from einops import pack, rearrange, repeat, unpack
@@ -103,8 +104,7 @@ class Attention(nn.Module):
         self.heads = heads
         self.scale = dim_head**-0.5
 
-        self.attend = nn.Softmax(dim=-1)
-        self.dropout = nn.Dropout(attn_drop_out_rate)
+        self.attn_drop_out_rate = attn_drop_out_rate
         self.to_qkv = nn.Linear(input_dim, inner_dim * 3, bias=qkv_bias)
 
         if project_out:
@@ -116,10 +116,13 @@ class Attention(nn.Module):
         qkv = self.to_qkv(x).chunk(3, dim=-1)
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=self.heads), qkv)
 
-        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
-        attn = self.attend(dots)
-        attn = self.dropout(attn)
-        out = torch.matmul(attn, v)
+        # Fused attention kernel; softmax(QK^T * scale) @ V with dropout on the
+        # attention weights, matching the previous explicit implementation.
+        out = F.scaled_dot_product_attention(
+            q, k, v,
+            dropout_p=self.attn_drop_out_rate if self.training else 0.0,
+            scale=self.scale,
+        )
 
         out = rearrange(out, "b h n d -> b n (h d)")
         out = self.to_out(out)
