@@ -1,4 +1,3 @@
-import torch
 from typing import Optional
 
 from dataloaders.data_representation.base import Base
@@ -41,51 +40,9 @@ class Signal(Base):
         prompt: Optional[str],
         encoder_tokenizer_out: dict,
     ):
-        truncated_padded_input = self.trunc_pad_input(prompt)
-        signal_id_indices = self.find_signal_token_indices(truncated_padded_input)
-        attention_mask = self.create_attention_mask(truncated_padded_input)
-        labels = self.create_labels(truncated_padded_input)
-        # print("signal_id_indices", len(signal_id_indices), "\n")
-        assert len(signal_id_indices) == self.args.num_encoder_tokens
-        assert len(truncated_padded_input) == len(attention_mask) == len(labels) == self.args.llm_input_len, (
-            f"Length mismatch: {len(truncated_padded_input)} != {len(attention_mask)} != {len(labels)} != {self.args.llm_input_len}"
-        )
-        elm = {
-            "elm_input_ids": torch.tensor(truncated_padded_input, dtype=torch.int64),
-            "elm_labels": torch.tensor(labels, dtype=torch.int64),
-            "elm_attention_mask": torch.tensor(attention_mask, dtype=torch.float32),
-            "signal_id_indices": torch.tensor(signal_id_indices, dtype=torch.int64),
-        }
-        return {**elm, "encoder_tokenizer_out": encoder_tokenizer_out}
-
-    def prepare_eval_inference_set(
-        self,
-        prompt: Optional[str],
-        encoder_tokenizer_out: dict,
-    ):
-        truncated_padded_input = self.trunc_pad_input(prompt)
-        signal_id_indices = self.find_signal_token_indices(truncated_padded_input)
-        attention_mask = self.create_attention_mask(truncated_padded_input)
-        assert len(truncated_padded_input) == len(attention_mask), f"Length mismatch: {len(truncated_padded_input)} != {len(attention_mask)}"
-        elm = {
-            "elm_input_ids": torch.tensor(truncated_padded_input, dtype=torch.int64),
-            "elm_attention_mask": torch.tensor(attention_mask, dtype=torch.float32),
-            "signal_id_indices": torch.tensor(signal_id_indices, dtype=torch.int64),
-        }
-        return {**elm, "encoder_tokenizer_out": encoder_tokenizer_out}
-
-    def trunc_pad_input(self, prompt: str):
-        prompt_tokens = self.llm_tokenizer.encode(prompt, add_special_tokens=False)
-        if "train" in self.args.mode:
-            prompt_len = len(prompt_tokens)
-            # print("prompt len", prompt_len, "\n")
-            if prompt_len == self.args.llm_input_len:
-                return prompt_tokens
-            elif prompt_len < self.args.llm_input_len:
-                return self.pad_input(prompt_tokens)
-            return self.truncate_input_preserving_signal_tokens(prompt_tokens)
-        else:
-            return prompt_tokens
+        item = super().prepare_training_set(prompt, encoder_tokenizer_out)
+        assert len(item["signal_id_indices"]) == self.args.num_encoder_tokens
+        return item
 
     def transform_ecg_signal(self, ecg_signal):
         if self.args.elm == "base_elf":
