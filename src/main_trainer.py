@@ -1,4 +1,5 @@
 import gc
+import math
 import torch
 
 from optimizers.optimizer_setup import get_optimizer
@@ -50,7 +51,9 @@ def main():
         set_seed(args.seed)
         build_dataloader = BuildDataLoader(args)
         dataloader = build_dataloader.build_dataloader()
-        args.max_steps = len(dataloader) * args.epochs
+        # Optimizer steps, not micro-batches: the LR schedule advances once per
+        # grad accumulation boundary (see runners/trainer.py).
+        args.max_steps = math.ceil(len(dataloader) / args.grad_accum_steps) * args.epochs
         build_elm = BuildELM(args)
         elm_components = build_elm.build_elm(dataloader.dataset.llm_tokenizer)
         gpu_setup = GPUSetup(args)
