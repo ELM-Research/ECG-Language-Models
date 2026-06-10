@@ -71,15 +71,15 @@ class Base(Dataset):
         prompt: Optional[str],
         encoder_tokenizer_out: dict,
     ):
-        truncated_padded_input = self.trunc_pad_input(prompt)
-        signal_id_indices = self.find_signal_token_indices(truncated_padded_input)
-        attention_mask = self.create_attention_mask(truncated_padded_input)
-        labels = self.create_labels(truncated_padded_input)
-        assert len(truncated_padded_input) == len(attention_mask) == len(labels) == self.args.llm_input_len, (
-            f"Length mismatch: {len(truncated_padded_input)} != {len(attention_mask)} != {len(labels)} != {self.args.llm_input_len}"
+        input_tokens = self.trunc_input(prompt)
+        signal_id_indices = self.find_signal_token_indices(input_tokens)
+        attention_mask = self.create_attention_mask(input_tokens)
+        labels = self.create_labels(input_tokens)
+        assert len(input_tokens) == len(attention_mask) == len(labels) <= self.args.llm_input_len, (
+            f"Length mismatch: {len(input_tokens)} != {len(attention_mask)} != {len(labels)} (limit {self.args.llm_input_len})"
         )
         elm = {
-            "elm_input_ids": torch.tensor(truncated_padded_input, dtype=torch.int64),
+            "elm_input_ids": torch.tensor(input_tokens, dtype=torch.int64),
             "elm_labels": torch.tensor(labels, dtype=torch.int64),
             "elm_attention_mask": torch.tensor(attention_mask, dtype=torch.float32),
             "signal_id_indices": torch.tensor(signal_id_indices, dtype=torch.int64),
@@ -91,28 +91,22 @@ class Base(Dataset):
         prompt: Optional[str],
         encoder_tokenizer_out: dict,
     ):
-        truncated_padded_input = self.trunc_pad_input(prompt)
-        signal_id_indices = self.find_signal_token_indices(truncated_padded_input)
-        attention_mask = self.create_attention_mask(truncated_padded_input)
-        assert len(truncated_padded_input) == len(attention_mask), f"Length mismatch: {len(truncated_padded_input)} != {len(attention_mask)}"
+        input_tokens = self.trunc_input(prompt)
+        signal_id_indices = self.find_signal_token_indices(input_tokens)
+        attention_mask = self.create_attention_mask(input_tokens)
+        assert len(input_tokens) == len(attention_mask), f"Length mismatch: {len(input_tokens)} != {len(attention_mask)}"
         elm = {
-            "elm_input_ids": torch.tensor(truncated_padded_input, dtype=torch.int64),
+            "elm_input_ids": torch.tensor(input_tokens, dtype=torch.int64),
             "elm_attention_mask": torch.tensor(attention_mask, dtype=torch.float32),
             "signal_id_indices": torch.tensor(signal_id_indices, dtype=torch.int64),
         }
         return {**elm, "encoder_tokenizer_out": encoder_tokenizer_out}
 
-    def trunc_pad_input(self, prompt: str):
+    def trunc_input(self, prompt: str):
         prompt_tokens = self.llm_tokenizer.encode(prompt, add_special_tokens=False)
-        if "train" in self.args.mode:
-            prompt_len = len(prompt_tokens)
-            if prompt_len == self.args.llm_input_len:
-                return prompt_tokens
-            elif prompt_len < self.args.llm_input_len:
-                return self.pad_input(prompt_tokens)
+        if "train" in self.args.mode and len(prompt_tokens) > self.args.llm_input_len:
             return self.truncate_input_preserving_signal_tokens(prompt_tokens)
-        else:
-            return prompt_tokens
+        return prompt_tokens
 
     @staticmethod
     def id_set(watch_token_entry) -> set:
@@ -201,10 +195,6 @@ class Base(Dataset):
         bos_token = next(iter(HF_LLMS[self.args.llm]["watch_tokens"]["bos_token"]))
         start_idx = truncated_padded_input.index(bos_token)
         return [0] * start_idx + [1] * (len(truncated_padded_input) - start_idx)
-
-    def pad_input(self, tokens: list) -> list:
-        padding_len = self.args.llm_input_len - len(tokens)
-        return [self.llm_tokenizer.pad_token_id] * padding_len + tokens  # left side padding
 
     def make_prompt(
         self,

@@ -47,21 +47,19 @@ class Symbolic(Base):
         ecg_tokens: np.array,
         prompt: str,
     ):
-        truncated_padded_input = self.trunc_pad_input(ecg_tokens, prompt)
-        attention_mask = self.create_attention_mask(truncated_padded_input)
-        labels = self.create_labels(truncated_padded_input)
+        input_tokens = self.trunc_input(ecg_tokens, prompt)
+        attention_mask = self.create_attention_mask(input_tokens)
+        labels = self.create_labels(input_tokens)
         if self.args.dev and is_main():
-            self.decode_and_print_mapping(truncated_padded_input)
+            self.decode_and_print_mapping(input_tokens)
             self.check_labels(labels)
-            self.check_attention_mask(truncated_padded_input, attention_mask)
+            self.check_attention_mask(input_tokens, attention_mask)
 
-        assert len(truncated_padded_input) == len(attention_mask) == len(labels) == self.args.llm_input_len, (
-            f"Length mismatch: {len(truncated_padded_input)} != {len(attention_mask)} != {len(labels)} != {self.args.llm_input_len}"
+        assert len(input_tokens) == len(attention_mask) == len(labels) <= self.args.llm_input_len, (
+            f"Length mismatch: {len(input_tokens)} != {len(attention_mask)} != {len(labels)} (limit {self.args.llm_input_len})"
         )
-        # print("truncated_padded_ecg_tokens", truncated_padded_ecg_tokens)
-        # print("signal_id_indices", signal_id_indices)
         return {
-            "elm_input_ids": torch.tensor(truncated_padded_input, dtype=torch.int64),
+            "elm_input_ids": torch.tensor(input_tokens, dtype=torch.int64),
             "elm_labels": torch.tensor(labels, dtype=torch.int64),
             "elm_attention_mask": torch.tensor(attention_mask, dtype=torch.float32),
         }
@@ -71,35 +69,29 @@ class Symbolic(Base):
         ecg_tokens: np.array,
         prompt: str,
     ):
-        truncated_padded_input = self.trunc_pad_input(ecg_tokens, prompt)
-        attention_mask = self.create_attention_mask(truncated_padded_input)
-        assert len(truncated_padded_input) == len(attention_mask), f"Length mismatch: {len(truncated_padded_input)} != {len(attention_mask)}"
+        input_tokens = self.trunc_input(ecg_tokens, prompt)
+        attention_mask = self.create_attention_mask(input_tokens)
+        assert len(input_tokens) == len(attention_mask), f"Length mismatch: {len(input_tokens)} != {len(attention_mask)}"
         return {
-            "elm_input_ids": torch.tensor(truncated_padded_input, dtype=torch.int64),
+            "elm_input_ids": torch.tensor(input_tokens, dtype=torch.int64),
             "elm_attention_mask": torch.tensor(attention_mask, dtype=torch.float32),
         }
 
-    ### PADDING/TRUNCATION FUNCTIONS ###
-    def trunc_pad_input(self, ecg_tokens: np.ndarray, prompt: str):
+    ### TRUNCATION FUNCTIONS ###
+    def trunc_input(self, ecg_tokens: np.ndarray, prompt: str):
         before, after = self.split_prompt(prompt)
         if "train" in self.args.mode:
             min_ecg_token_len = int(self.args.min_ecg_tokens_len)
             before_len, after_len, ecg_token_len = len(before), len(after), len(ecg_tokens)
 
-            if before_len + after_len + ecg_token_len == self.args.llm_input_len:
-                # return before + ecg_tokens + after, self.convert_ecg_tokens(ecg_tokens)
-                return before + ecg_tokens + after
-            elif before_len + after_len + ecg_token_len < self.args.llm_input_len:
-                # return self.pad_input(before + ecg_tokens + after), self.convert_ecg_tokens(ecg_tokens)
-                return self.pad_input(before + ecg_tokens + after)
+            if before_len + after_len + ecg_token_len > self.args.llm_input_len:
+                if before_len + min_ecg_token_len > self.args.llm_input_len:
+                    raise ValueError("before + min_ecg exceeds llm_input_len; lower min_ecg_tokens_len.")
 
-            if before_len + min_ecg_token_len > self.args.llm_input_len:
-                raise ValueError("before + min_ecg exceeds llm_input_len; lower min_ecg_tokens_len.")
-
-            target_ecg = min(ecg_token_len, max(min_ecg_token_len, self.args.llm_input_len - (before_len + after_len)))
-            ecg_tokens = ecg_tokens[:target_ecg]
-            remaining_after = self.args.llm_input_len - before_len - len(ecg_tokens)
-            after = after[: max(remaining_after, 0)]
+                target_ecg = min(ecg_token_len, max(min_ecg_token_len, self.args.llm_input_len - (before_len + after_len)))
+                ecg_tokens = ecg_tokens[:target_ecg]
+                remaining_after = self.args.llm_input_len - before_len - len(ecg_tokens)
+                after = after[: max(remaining_after, 0)]
         return before + ecg_tokens + after
 
     def convert_ecg_tokens(self, ecg_tokens):
