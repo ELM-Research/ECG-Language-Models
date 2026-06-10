@@ -26,6 +26,7 @@ class BuildDataLoader:
         return torch_data_loader
 
     def build_torch_dataloader(self, torch_dataset):
+        self.pad_token_id = torch_dataset.llm_tokenizer.pad_token_id
         sampler = self.get_torch_dataloader_sampler(torch_dataset)
         if "train" in self.args.mode:
             torch_data_loader = DataLoader(
@@ -64,8 +65,47 @@ class BuildDataLoader:
         batch = [item for item in batch if item is not None]
         if len(batch) == 0:
             return None
+        batch = self._pad_items_to_batch_max(batch)
         self._assert_same_structure_and_shapes(batch)
         return torch.utils.data.dataloader.default_collate(batch)
+
+    def _pad_items_to_batch_max(self, batch):
+        """Left-pad each item's sequence tensors to the longest sample in the batch.
+
+        Pad values follow the conventions used when building the items:
+        pad_token_id for input ids, -100 for labels (ignored by the loss), 0
+        for the attention mask. signal_id_indices hold positions into the
+        sequence, so each sample's indices shift by its own pad amount; the -1
+        "no signal" sentinel stays negative. In train mode the target length
+        is rounded up to a multiple of 8 so matmul shapes stay tensor-core
+        friendly; eval batches keep their exact length.
+        """
+        lengths = [item["elm_input_ids"].shape[0] for item in batch]
+        target = max(lengths)
+        if "train" in self.args.mode:
+            target = -(-target // 8) * 8
+            target = min(target, self.args.llm_input_len)
+        if all(length == target for length in lengths):
+            return batch
+        padded_batch = []
+        for item, length in zip(batch, lengths):
+            pad = target - length
+            if pad == 0:
+                padded_batch.append(item)
+                continue
+            item = dict(item)
+            item["elm_input_ids"] = torch.cat(
+                [torch.full((pad,), self.pad_token_id, dtype=item["elm_input_ids"].dtype), item["elm_input_ids"]])
+            if "elm_labels" in item:
+                item["elm_labels"] = torch.cat(
+                    [torch.full((pad,), -100, dtype=item["elm_labels"].dtype), item["elm_labels"]])
+            item["elm_attention_mask"] = torch.cat(
+                [torch.zeros(pad, dtype=item["elm_attention_mask"].dtype), item["elm_attention_mask"]])
+            if "signal_id_indices" in item:
+                indices = item["signal_id_indices"]
+                item["signal_id_indices"] = torch.where(indices >= 0, indices + pad, indices)
+            padded_batch.append(item)
+        return padded_batch
 
     def _get_structure_shapes(self, x, path="root"):
         shapes = {}
