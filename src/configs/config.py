@@ -59,6 +59,8 @@ def get_args(mode: Mode) -> argparse.Namespace:
                             help="Training phase: pretrain (raw text + bos/signal/eos, no chat template), sft (chat template), rl (sft + think/answer special tokens)")
         parser.add_argument("--explicit_thinking", action="store_true", default=False,
                             help="Treat <think>\\n as a fixed prompt prefix: mask loss up to and including <think>\\n (SFT); inject it at generation to force thinking.")
+    if mode in {"eval", "inference"}:
+        parser.add_argument("--eval_batch_size", type=int, default=1, help="Number of turns generated per batch during eval/inference")
     if mode == "train":
         parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "adamw", "muon"], help="Optimizer type")
         parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
