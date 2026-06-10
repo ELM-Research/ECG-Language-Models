@@ -57,19 +57,19 @@ def main():
                 with open(examples_path, "w") as ef:
                     json.dump(examples, ef, indent=2)
                 print(f"Saved {len(examples)} eval examples to {examples_path}")
+            if "confusion_matrix" in out:
+                cm_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}.png")
+                save_confusion_matrix_png(out["confusion_matrix"], cm_path)
+                other_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}_other.png")
+                save_other_outputs_histogram_png(out["other_output_counts"], other_path, top_k = 10)
+            incorrect_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}_incorrect.png")
+            save_incorrect_predictions_histogram_png(out["references"], out["hypotheses"], incorrect_path)
+            if "pretrain_breakdown" in out:
+                save_pretrain_breakdown_pngs(out["pretrain_breakdown"],
+                                             results_file.replace(".json", f"{fold}_{seed}_pretrain"))
             del elm, elm_components, build_elm, gpu_setup, dataloader, build_dataloader
             gc.collect()
             torch.cuda.empty_cache()
-        if "confusion_matrix" in out:
-            cm_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}.png")
-            save_confusion_matrix_png(out["confusion_matrix"], cm_path)
-            other_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}_other.png")
-            save_other_outputs_histogram_png(out["other_output_counts"], other_path, top_k = 10)
-        incorrect_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}_incorrect.png")
-        save_incorrect_predictions_histogram_png(out["references"], out["hypotheses"], incorrect_path)
-        if "pretrain_breakdown" in out:
-            save_pretrain_breakdown_pngs(out["pretrain_breakdown"],
-                                         results_file.replace(".json", f"{fold}_{seed}_pretrain"))
     statistical_results = run_statistical_analysis(all_metrics)
     with open(results_file, "w") as f:
         json.dump(statistical_results, f, indent=2)
