@@ -72,7 +72,6 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--beta2", type=float, default=0.99, help="Beta2 for optimizer")
         parser.add_argument("--eps", type=float, default=1e-8, help="Epsilon for optimizer")
         parser.add_argument("--muon_momentum", type=float, default=0.95, help="Muon momentum")
-        parser.add_argument("--muon_nesterov", action="store_true", default=True, help="Nesterov momentum for Muon")
         parser.add_argument("--muon_ns_steps", type=int, default=5, help="Newton-Schulz iteration steps")
         parser.add_argument("--muon_adamw_lr_ratio", type=float, default=0.015, help="AdamW LR as fraction of Muon LR")
         parser.add_argument("--lr_schedule", type=str, default="constant", choices=["constant", "cosine", "inv_sqrt"], help="LR schedule after warmup")

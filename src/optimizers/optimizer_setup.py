@@ -116,7 +116,6 @@ class Optimizer:
         adamw_lr = self.peak_lr * adamw_lr_ratio
 
         muon_momentum = getattr(self.args, "muon_momentum", 0.95)
-        muon_nesterov = getattr(self.args, "muon_nesterov", True)
         muon_ns_steps = getattr(self.args, "muon_ns_steps", 5)
 
         wd = self._weight_decay()
@@ -130,7 +129,6 @@ class Optimizer:
             muon_params,
             lr=self.peak_lr,
             momentum=muon_momentum,
-            nesterov=muon_nesterov,
             ns_steps=muon_ns_steps,
             weight_decay=wd,
         )
