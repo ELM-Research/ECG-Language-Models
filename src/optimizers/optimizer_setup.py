@@ -81,7 +81,7 @@ class Optimizer:
         wd = wd if wd is not None else self.args.weight_decay
         if self.args.scale_wd == "inv_sqrt":
             return wd / (self.scale**0.5)
-        elif self.args.scale_wd == "linear":
+        elif self.args.scale_wd == "inv_linear":
             return wd / self.scale
         return wd
 
