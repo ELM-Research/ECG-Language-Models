@@ -5,7 +5,7 @@ import torch
 from pathlib import Path
 
 from configs.config import get_args
-from utils.gpu_manager import GPUSetup
+from utils.gpu_manager import GPUSetup, init_dist, cleanup, is_main
 from utils.seed_manager import set_seed
 from dataloaders.build_dataloader import BuildDataLoader
 from elms.build_elm import BuildELM
@@ -19,6 +19,8 @@ def main():
     mode = "eval"
     args = get_args(mode)
     args.mode = mode
+    if args.distributed:
+        init_dist()
     # folds = ["1", "2", "3", "4", "5"]
     # seeds = [1337, 1338, 1339, 1340, 1341]
     folds = ["1"]
@@ -36,7 +38,8 @@ def main():
     results_file = os.path.join(checkpoint_dir, f"{ckpt_file_name}_{data_name}_{sys_prompt_name}_{args.perturb}_{args.max_new_tokens}.json")
     for fold in folds:
         for seed in seeds:
-            print(f"Evaluating fold {fold} with seed {seed}")
+            if is_main():
+                print(f"Evaluating fold {fold} with seed {seed}")
             args.fold = fold
             args.seed = seed
             set_seed(args.seed)
@@ -50,7 +53,7 @@ def main():
                 gpu_setup.print_model_device(elm, f"{args.llm}_{args.encoder}")
             out = evaluate(elm, dataloader, args)
             all_metrics.append(out)
-            if len(all_metrics) == 1:
+            if is_main() and len(all_metrics) == 1:
                 examples_path = results_file.replace(".json", f"examples_{args.max_new_tokens}.json")
                 examples = [{"prompt": p, "predicted": h, "ground_truth": r}
                             for p, h, r in zip(out["prompts"], out["hypotheses"], out["references"])]
@@ -60,20 +63,24 @@ def main():
             del elm, elm_components, build_elm, gpu_setup, dataloader, build_dataloader
             gc.collect()
             torch.cuda.empty_cache()
-        if "confusion_matrix" in out:
-            cm_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}.png")
-            save_confusion_matrix_png(out["confusion_matrix"], cm_path)
-            other_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}_other.png")
-            save_other_outputs_histogram_png(out["other_output_counts"], other_path, top_k = 10)
-        incorrect_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}_incorrect.png")
-        save_incorrect_predictions_histogram_png(out["references"], out["hypotheses"], incorrect_path)
-        if "pretrain_breakdown" in out:
-            save_pretrain_breakdown_pngs(out["pretrain_breakdown"],
-                                         results_file.replace(".json", f"{fold}_{seed}_pretrain"))
-    statistical_results = run_statistical_analysis(all_metrics)
-    with open(results_file, "w") as f:
-        json.dump(statistical_results, f, indent=2)
-    print(f"Saved evaluation results to {results_file}")
+        if is_main():
+            if "confusion_matrix" in out:
+                cm_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}.png")
+                save_confusion_matrix_png(out["confusion_matrix"], cm_path)
+                other_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}_other.png")
+                save_other_outputs_histogram_png(out["other_output_counts"], other_path, top_k = 10)
+            incorrect_path = results_file.replace(".json", f"{fold}_{seed}_{args.max_new_tokens}_incorrect.png")
+            save_incorrect_predictions_histogram_png(out["references"], out["hypotheses"], incorrect_path)
+            if "pretrain_breakdown" in out:
+                save_pretrain_breakdown_pngs(out["pretrain_breakdown"],
+                                             results_file.replace(".json", f"{fold}_{seed}_pretrain"))
+    if is_main():
+        statistical_results = run_statistical_analysis(all_metrics)
+        with open(results_file, "w") as f:
+            json.dump(statistical_results, f, indent=2)
+        print(f"Saved evaluation results to {results_file}")
+    if args.distributed:
+        cleanup()
 
 
 if __name__ == "__main__":

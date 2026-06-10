@@ -12,7 +12,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from utils.gpu_manager import is_main, train_dev_break, batch_to_device
+import torch.distributed as dist
+
+from utils.gpu_manager import is_main, train_dev_break, batch_to_device, get_rank, get_world_size
 
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 _ANSWER_RE = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
@@ -367,28 +369,37 @@ def evaluate(elm, dataloader, args):
     device = next(elm.parameters()).device
 
     turns = flatten_eval_turns(dataloader, args, needs_signal_injection)
+    # Every rank flattens the full dataset identically; each generates a
+    # disjoint stride of the turn list and results are gathered afterwards.
+    world_size = get_world_size()
+    local_turns = turns[get_rank()::world_size] if world_size > 1 else turns
+    gen_model = elm.module if hasattr(elm, "module") else elm  # unwrap DDP for generate()
 
     eval_batch_size = getattr(args, "eval_batch_size", 1)
     pad_token_id = dataset.llm_tokenizer.pad_token_id
     results = []  # (order, gt_text, gen_txt, prefix_ids)
-    progress = tqdm(range(0, len(turns), eval_batch_size),
+    progress = tqdm(range(0, len(local_turns), eval_batch_size),
                     desc=f"LLM: {args.llm} ENCODER: {args.encoder} (eval_bs={eval_batch_size})",
                     disable=not is_main(), leave=False)
     with torch.no_grad():
         for start in progress:
-            chunk = turns[start:start + eval_batch_size]
+            chunk = local_turns[start:start + eval_batch_size]
             gen_batch = collate_turns(chunk, pad_token_id)
             gen_batch = {k: batch_to_device(v, device) for k, v in gen_batch.items()}
-            gen_out = elm.generate(**gen_batch, max_new_tokens=args.max_new_tokens)
+            gen_out = gen_model.generate(**gen_batch, max_new_tokens=args.max_new_tokens)
             for turn, row in zip(chunk, gen_out):
                 gen_txt = dataset.get_generated_response_for_turn(turn["prefix_ids"], row.cpu().tolist())
-                if getattr(args, "dev", False):
+                if getattr(args, "dev", False) and is_main():
                     print(f"\nTurn (order {turn['order']}):")
                     print(f"\nGround Truth:\n{turn['gt_text']}")
                     print(f"\nGenerated:\n{gen_txt}")
                     print("-" * 100)
                 results.append((turn["order"], turn["gt_text"], gen_txt, turn["prefix_ids"]))
 
+    if world_size > 1:
+        gathered = [None] * world_size
+        dist.all_gather_object(gathered, results)
+        results = [r for shard in gathered for r in shard]
     results.sort(key=lambda r: r[0])
     all_refs, all_hyps, all_prompts = [], [], []
     for _, gt, gen_txt, prefix_ids in results:
@@ -402,12 +413,13 @@ def evaluate(elm, dataloader, args):
     results = {"answer": evaluate_strings(refs_a, hyps_a)}
     if think_pairs:
         results["thinking"] = evaluate_strings(*map(list, zip(*think_pairs)))
-    print("\n=== N-Turn Evaluation (generated vs. gold response only) ===")
-    print(f"Pairs: {len(all_refs)} (thinking pairs: {len(think_pairs)})")
-    for group, mdict in results.items():
-        print(f"[{group}]")
-        for k, v in mdict.items():
-            print(f"  {k}: {v:.4f}")
+    if is_main():
+        print("\n=== N-Turn Evaluation (generated vs. gold response only) ===")
+        print(f"Pairs: {len(all_refs)} (thinking pairs: {len(think_pairs)})")
+        for group, mdict in results.items():
+            print(f"[{group}]")
+            for k, v in mdict.items():
+                print(f"  {k}: {v:.4f}")
     out = {
         "num_pairs": len(all_refs),
         "metrics": results,
@@ -418,13 +430,15 @@ def evaluate(elm, dataloader, args):
     if getattr(args, "train_phase", "sft") == "pretrain" and refs_a:
         breakdown = pretrain_diagnostic_breakdown(refs_a, hyps_a)
         out["pretrain_breakdown"] = breakdown
-        print(f"\n=== Pretrain diagnostic breakdown (N={breakdown['n']:,}) ===")
-        print(f"  Matched={breakdown['matched']:,}  Not matched={breakdown['not_matched']:,}  Other={breakdown['other']:,}")
-        print(f"  Missed_inst={breakdown['missed_inst']:,}  Extra_inst={breakdown['extra_inst']:,}")
-        print(f"  Only missed={breakdown['only_missed']:,}  Only extra={breakdown['only_extra']:,}  Both={breakdown['both']:,}")
+        if is_main():
+            print(f"\n=== Pretrain diagnostic breakdown (N={breakdown['n']:,}) ===")
+            print(f"  Matched={breakdown['matched']:,}  Not matched={breakdown['not_matched']:,}  Other={breakdown['other']:,}")
+            print(f"  Missed_inst={breakdown['missed_inst']:,}  Extra_inst={breakdown['extra_inst']:,}")
+            print(f"  Only missed={breakdown['only_missed']:,}  Only extra={breakdown['only_extra']:,}  Both={breakdown['both']:,}")
     if any(d.startswith("ecg-comp") for d in args.data):
         per_class_acc, confusion_matrix, other_counts = compute_classification_metrics(refs_a, hyps_a)
-        print_classification_metrics(per_class_acc, confusion_matrix)
+        if is_main():
+            print_classification_metrics(per_class_acc, confusion_matrix)
         results["per_class_acc"] = per_class_acc
         out["confusion_matrix"] = confusion_matrix
         out["other_output_counts"] = other_counts
