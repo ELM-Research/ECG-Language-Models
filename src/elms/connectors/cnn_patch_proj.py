@@ -34,7 +34,7 @@ class CNNPatchProjection(nn.Module):
         # (B, C, N, P) -> (B, N, C, P) -> (B*N, C, P)
         x = ecg_signal.reshape(B, C, self.num_patches, patch_size)
         x = x.permute(0, 2, 1, 3).reshape(B * self.num_patches, C, patch_size)
-        x = x.to(dtype=self.input_dtype)
+        x = x.to(dtype=self.conv1.weight.dtype)
 
         # Conv layers with ReLU
         x = F.relu(self.conv1(x))   # (B*N, 64, P)
