@@ -116,8 +116,6 @@ class Attention(nn.Module):
         qkv = self.to_qkv(x).chunk(3, dim=-1)
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=self.heads), qkv)
 
-        # Fused attention kernel; softmax(QK^T * scale) @ V with dropout on the
-        # attention weights, matching the previous explicit implementation.
         out = F.scaled_dot_product_attention(
             q, k, v,
             dropout_p=self.attn_drop_out_rate if self.training else 0.0,
