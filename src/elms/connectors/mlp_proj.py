@@ -16,7 +16,7 @@ class MLPProjection(nn.Module):
         ).to(dtype=self.input_dtype)
 
     def forward(self, ecg_signal):
-        return self.projection(ecg_signal.to(dtype=self.input_dtype))
+        return self.projection(ecg_signal.to(dtype=self.projection[0].weight.dtype))
 
     def project(self, signal_embeds):
-        return self.projection(signal_embeds.to(dtype=self.input_dtype))
+        return self.projection(signal_embeds.to(dtype=self.projection[0].weight.dtype))
