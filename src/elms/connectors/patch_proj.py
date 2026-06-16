@@ -15,4 +15,4 @@ class PatchProjection(nn.Module):
         B, C, L = ecg_signal.shape
         x = ecg_signal.reshape(B, C, self.num_patches, L // self.num_patches)
         x = x.permute(0, 2, 1, 3).reshape(B, self.num_patches, -1)
-        return self.projection(x.to(dtype=self.input_dtype))
+        return self.projection(x.to(dtype=self.projection.weight.dtype))
