@@ -1,3 +1,6 @@
+import sys
+import traceback
+
 import wandb
 
 def setup_wandb(args, name = None):
@@ -9,7 +12,10 @@ def setup_wandb(args, name = None):
     )
 
 def cleanup_wandb():
-    wandb.finish()
+    error = sys.exc_info()[1]
+    if error and wandb.run is not None:
+        wandb.run.summary["error"] = traceback.format_exc()
+    wandb.finish(exit_code=1 if error else 0)
 
 def log_wandb(metrics, prefix = None):
     if prefix:
