@@ -44,8 +44,10 @@ class BuildDataLoader:
                 torch_dataset,
                 batch_size=1,  # batched inference/eval not implemented
                 shuffle=False,
+                num_workers=self.args.num_workers,
                 pin_memory=torch.cuda.is_available(),
                 collate_fn=self.collate_fn,
+                persistent_workers=(self.args.num_workers > 0),
             )
         return torch_data_loader
 
