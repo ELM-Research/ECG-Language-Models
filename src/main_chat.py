@@ -19,7 +19,7 @@ import numpy as np
 import torch
 
 from configs.config import get_args
-from configs.constants import HF_LLMS, SIGNAL_TOKEN_PLACEHOLDER, RL_TOKENS
+from configs.constants import HF_LLMS, SIGNAL_TOKEN_PLACEHOLDER, RL_TOKENS, SIGNAL_INJECTION_ELMS
 from utils.chat_template_manager import get_conv_template
 from utils.gpu_manager import GPUSetup, batch_to_device
 from utils.seed_manager import set_seed
@@ -77,7 +77,7 @@ def prepare_generation_input(prompt_str, llm_tokenizer, ecg_tensor, args, device
     if not signal_indices:
         signal_indices = [-1]
 
-    needs_signal = args.elm in ("mlp_llava", "base_elf", "patch_elf", "conv_elf")
+    needs_signal = args.elm in SIGNAL_INJECTION_ELMS
 
     gen_batch = {
         "elm_input_ids": torch.tensor(input_ids, dtype=torch.int64).unsqueeze(0),
@@ -152,7 +152,7 @@ def main():
     chat_template = build_chat_template(args)
     ecg_tensor = None
     ecg_path_display = None
-    needs_signal = args.elm in ("mlp_llava", "base_elm", "patch_elm", "base_elf", "patch_elf")
+    needs_signal = args.elm in SIGNAL_INJECTION_ELMS
 
     signal_placeholder = "".join([SIGNAL_TOKEN_PLACEHOLDER] * args.num_encoder_tokens) + "\n"
 
