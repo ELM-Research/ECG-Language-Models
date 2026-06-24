@@ -336,6 +336,19 @@ SIGNAL_TOKEN_PLACEHOLDER = "<signal>"
 ECG_TOKEN_PREFIX = "signal_"
 RL_TOKENS = ["<think>", "</think>", "<answer>", "</answer>"]
 
+# ELM types that encode an ECG signal and inject it into the prompt at the
+# signal-token placeholder positions. This is every encoder-based ELM (see the
+# dispatch in elms/connect_nns.py) except the text-only "ecg_byte". Anything
+# that decides whether to insert the placeholder or attach encoder outputs must
+# use this single source of truth so the two decisions never disagree.
+SIGNAL_INJECTION_ELMS = frozenset({
+    "linear_llava",
+    "mlp_llava",
+    "base_elf",
+    "patch_elf",
+    "conv_elf",
+})
+
 # Encoders
 ECG_ENCODERS = {
     "merl": {
