@@ -80,7 +80,7 @@ class DatasetMixer:
     def build_encoder_tokenizer(
         self,
     ):
-        if self.args.encoder in VISION_ENCODERS:
+        if self.args.encoder in VISION_ENCODERS and VISION_ENCODERS[self.args.encoder]["tokenizer"]:
             return {"encoder_tokenizer": AutoProcessor.from_pretrained(VISION_ENCODERS[self.args.encoder]["tokenizer"])}
         else:
             return {"encoder_tokenizer": None}

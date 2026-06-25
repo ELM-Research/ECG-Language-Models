@@ -297,6 +297,16 @@ VISION_ENCODERS = {
         "encoder_input_len": 64,
         "output_hidden_states": True,
     },
+    "siglip-ecg": {
+        "model": "google/siglip2-base-patch16-naflex",
+        "tokenizer": None,
+        "find_unused_parameters": False,
+        "strict": False,
+        "model_hidden_size": None,
+        "projection_dim": None,
+        "encoder_input_len": None,
+        "output_hidden_states": True,
+    },
     "vit-base-patch16-224-in21k": {
         "model": "google/vit-base-patch16-224-in21k",
         "tokenizer": "google/vit-base-patch16-224-in21k",
