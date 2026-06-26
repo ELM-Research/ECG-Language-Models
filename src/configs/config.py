@@ -82,6 +82,8 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--grad_clip", type=float, default=0.0, help="Max gradient norm for clipping (0 to disable)")
         parser.add_argument("--scale_wd", type=str, default="none", choices=["none", "inv_sqrt", "inv_linear"])
         parser.add_argument("--resume_ckpt", type=str, default=None, help="Full training resume: restores model, optimizer, and LR schedule state")
+        parser.add_argument("--val_split", type=float, default=None,
+                            help="Hold out examples from train for validation (<1 = fraction of train, >=1 = absolute count). Default: no validation.")
 
         # RL (train_phase=rl) — agnostic policy-gradient pipeline
         parser.add_argument("--rl_algo", type=str, default="sapo", choices=["sapo"], help="RL policy-loss algorithm")

@@ -55,6 +55,16 @@ def broadcast_value(val, src: int = 0):
     return obj[0]
 
 
+def all_reduce_sum(value: float) -> float:
+    """Sum a scalar across all ranks (no-op when not distributed)."""
+    if not (dist.is_available() and dist.is_initialized()):
+        return value
+    device = torch.device(f"cuda:{get_local_rank()}") if torch.cuda.is_available() else torch.device("cpu")
+    t = torch.tensor([value], dtype=torch.float64, device=device)
+    dist.all_reduce(t, op=dist.ReduceOp.SUM)
+    return t.item()
+
+
 def train_dev_break(enabled: bool, batch: dict, loss_value: float) -> bool:
     if not enabled:
         return False
