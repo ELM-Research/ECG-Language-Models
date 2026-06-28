@@ -35,9 +35,11 @@ class SiglipEcg(nn.Module):
 
     def get_encoder_embeddings(self, ecg_signal):
         patches = rearrange(ecg_signal, "b c (n p) -> b n (c p)", p=self.patch_size)
+        B, N, _ = patches.shape
+        pixel_attention_mask = torch.ones(B, N, dtype=torch.long, device = patches.device)
         spatial_shapes = torch.zeros(patches.shape[0], 2, dtype=torch.long, device=patches.device)
-        out = self.vision_encoder.vision_model(pixel_values=patches,
-                                               attention_mask=None,
-                                               spatial_shapes=spatial_shapes)
+        out = self.vision_encoder.vision_model(pixel_values=patches.to(torch.float32),
+                                               spatial_shapes=spatial_shapes,
+                                               pixel_attention_mask = pixel_attention_mask)
         x = out.last_hidden_state.transpose(1, 2)
         return self.pool(x).transpose(1, 2)
