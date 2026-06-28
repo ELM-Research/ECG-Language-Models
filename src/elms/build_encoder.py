@@ -23,6 +23,8 @@ class BuildEncoder:
             encoder_components = self.prepare_hf_clip()
         elif self.args.encoder == "siglip2-so400m-patch16-naflex":
             encoder_components = self.prepare_hf_siglip()
+        elif self.args.encoder == "siglip-ecg":
+            encoder_components = self.prepare_siglip_ecg()
         elif self.args.encoder == "vit-base-patch16-224-in21k":
             encoder_components = self.prepare_hf_vit()
         else:
@@ -61,6 +63,19 @@ class BuildEncoder:
         VISION_ENCODERS[self.args.encoder]["model_hidden_size"] = hf_encoder.config.text_config.hidden_size
         VISION_ENCODERS[self.args.encoder]["projection_dim"] = hf_encoder.config.text_config.hidden_size
         model = HFSiglip(hf_encoder, VISION_ENCODERS[self.args.encoder]["output_hidden_states"])
+        return {"encoder": model}
+
+    def prepare_siglip_ecg(self,):
+        from transformers import AutoModel
+        from elms.vision_encoders.siglip_ecg.siglip_ecg import SiglipEcg
+        hf_encoder = AutoModel.from_pretrained(VISION_ENCODERS[self.args.encoder]["model"])
+        hidden = hf_encoder.config.vision_config.hidden_size
+        VISION_ENCODERS[self.args.encoder]["model_hidden_size"] = hidden
+        VISION_ENCODERS[self.args.encoder]["projection_dim"] = hidden
+        model = SiglipEcg(hf_encoder, segment_len=self.args.segment_len,
+                          patch_size=self.calculate_patch_size(),
+                          num_encoder_tokens=self.args.num_encoder_tokens,
+                          num_leads=len(self.args.leads))
         return {"encoder": model}
 
     def prepare_merl(self,):
