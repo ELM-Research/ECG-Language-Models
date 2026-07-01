@@ -116,5 +116,6 @@ class BuildLLM:
             r=self.args.lora_rank,
             lora_alpha=self.args.lora_alpha,
             task_type=TaskType.CAUSAL_LM,
+            target_modules=HF_LLMS[self.args.llm].get("lora_target_modules"),
         )
         return lora_config

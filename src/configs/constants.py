@@ -262,6 +262,7 @@ HF_LLMS = {
         "system_prompt": True,
         "role": "assistant",
         "text_backbone": True,
+        "lora_target_modules": ["q_proj", "v_proj"],
         "watch_tokens": {
             "bos_token": {248045: "<|im_start|>"},
             "eos_token": {248046: "<|im_end|>"},
@@ -288,6 +289,7 @@ HF_LLMS = {
         "system_prompt": True,
         "role": "assistant",
         "text_backbone": True,
+        "lora_target_modules": ["q_proj", "v_proj"],
         "watch_tokens": {
             "bos_token": {248045: "<|im_start|>"},
             "eos_token": {248046: "<|im_end|>"},
@@ -314,6 +316,7 @@ HF_LLMS = {
         "system_prompt": True,
         "role": "assistant",
         "text_backbone": True,
+        "lora_target_modules": ["q_proj", "v_proj"],
         "watch_tokens": {
             "bos_token": {248045: "<|im_start|>"},
             "eos_token": {248046: "<|im_end|>"},
@@ -340,6 +343,7 @@ HF_LLMS = {
         "system_prompt": True,
         "role": "assistant",
         "text_backbone": True,
+        "lora_target_modules": ["q_proj", "v_proj"],
         "watch_tokens": {
             "bos_token": {248045: "<|im_start|>"},
             "eos_token": {248046: "<|im_end|>"},
