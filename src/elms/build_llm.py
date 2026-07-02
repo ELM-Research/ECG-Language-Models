@@ -55,17 +55,10 @@ class BuildLLM:
     ):
         model_id = HF_LLMS[self.args.llm]["model"]
         native_dtype = HF_LLMS[self.args.llm]["native_dtype"]
-        text_backbone = HF_LLMS[self.args.llm].get("text_backbone", False)
         if self.args.scratch:
             config = AutoConfig.from_pretrained(model_id)
-            if text_backbone:  # multimodal checkpoint: train only its text decoder
-                config = config.text_config
             config._attn_implementation = self.args.attention_type
             hf_llm = AutoModelForCausalLM.from_config(config).to(native_dtype)
-        elif text_backbone:  # load only the text backbone out of the multimodal checkpoint
-            config = AutoConfig.from_pretrained(model_id).text_config
-            config._attn_implementation = self.args.attention_type
-            hf_llm = AutoModelForCausalLM.from_pretrained(model_id, config=config, dtype=native_dtype)
         else:
             hf_llm = AutoModelForCausalLM.from_pretrained(
                 model_id,
