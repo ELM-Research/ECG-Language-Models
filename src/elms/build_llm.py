@@ -26,6 +26,10 @@ class BuildLLM:
                 from elms.llms.qwen25.qwen25 import Qwen25
                 model = Qwen25(llm, self.pad_token_id, self.eos_token_id,
                                HF_LLMS[self.args.llm]["output_hidden_states"])
+            elif "qwen3.5" in self.args.llm:
+                from elms.llms.qwen35.qwen35 import Qwen35
+                model = Qwen35(llm, self.pad_token_id, self.eos_token_id,
+                               HF_LLMS[self.args.llm]["output_hidden_states"])
             elif "qwen3" in self.args.llm:
                 from elms.llms.qwen3.qwen3 import Qwen3
                 model = Qwen3(llm, self.pad_token_id, self.eos_token_id,
@@ -49,14 +53,16 @@ class BuildLLM:
     def build_hf_llm(
         self,
     ):
+        model_id = HF_LLMS[self.args.llm]["model"]
+        native_dtype = HF_LLMS[self.args.llm]["native_dtype"]
         if self.args.scratch:
-            config = AutoConfig.from_pretrained(HF_LLMS[self.args.llm]["model"])
+            config = AutoConfig.from_pretrained(model_id)
             config._attn_implementation = self.args.attention_type
-            hf_llm = AutoModelForCausalLM.from_config(config).to(HF_LLMS[self.args.llm]["native_dtype"])
+            hf_llm = AutoModelForCausalLM.from_config(config).to(native_dtype)
         else:
             hf_llm = AutoModelForCausalLM.from_pretrained(
-                HF_LLMS[self.args.llm]["model"],
-                dtype=HF_LLMS[self.args.llm]["native_dtype"],
+                model_id,
+                dtype=native_dtype,
                 attn_implementation=self.args.attention_type,
             )
         HF_LLMS[self.args.llm]["model_hidden_size"] = hf_llm.config.hidden_size
@@ -107,5 +113,6 @@ class BuildLLM:
             r=self.args.lora_rank,
             lora_alpha=self.args.lora_alpha,
             task_type=TaskType.CAUSAL_LM,
+            target_modules=HF_LLMS[self.args.llm].get("lora_target_modules"),
         )
         return lora_config
