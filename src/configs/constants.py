@@ -361,7 +361,6 @@ HF_LLMS = {
         "output_hidden_states": False,
         "system_prompt": True,
         "role": "assistant",
-        "text_backbone": True,
         "lora_target_modules": ["q_proj", "k_proj", "v_proj",
                                 "o_proj", "gate_proj", "up_proj", "down_proj"],
         "watch_tokens": {
@@ -389,7 +388,6 @@ HF_LLMS = {
         "output_hidden_states": False,
         "system_prompt": True,
         "role": "assistant",
-        "text_backbone": True,
         "lora_target_modules": ["q_proj", "k_proj", "v_proj",
                                 "o_proj", "gate_proj", "up_proj", "down_proj"],
         "watch_tokens": {
@@ -417,7 +415,6 @@ HF_LLMS = {
         "output_hidden_states": False,
         "system_prompt": True,
         "role": "assistant",
-        "text_backbone": True,
         "lora_target_modules": ["q_proj", "k_proj", "v_proj",
                                 "o_proj", "gate_proj", "up_proj", "down_proj"],
         "watch_tokens": {
@@ -445,7 +442,6 @@ HF_LLMS = {
         "output_hidden_states": False,
         "system_prompt": True,
         "role": "assistant",
-        "text_backbone": True,
         "lora_target_modules": ["q_proj", "k_proj", "v_proj",
                                 "o_proj", "gate_proj", "up_proj", "down_proj"],
         "watch_tokens": {
