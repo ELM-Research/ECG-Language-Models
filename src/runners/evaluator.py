@@ -12,6 +12,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from configs.constants import SIGNAL_INJECTION_ELMS
 from utils.gpu_manager import is_main, train_dev_break, batch_to_device
 
 _THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
@@ -301,8 +302,7 @@ def save_incorrect_predictions_histogram_png(references, hypotheses, path, top_k
 def evaluate(elm, dataloader, args):
     show_progress = is_main()
     elm.eval()
-    needs_signal_injection = args.elm in ("mlp_llava", "linear_llava", "base_elf",
-                                          "patch_elf", "conv_elf")
+    needs_signal_injection = args.elm in SIGNAL_INJECTION_ELMS
     progress = tqdm(
         dataloader,
         desc=f"LLM: {args.llm} ENCODER: {args.encoder}",

@@ -248,7 +248,107 @@ HF_LLMS = {
             },
         },
     },
-    "qwen3.5-0.8b": {
+    "qwen3-0.6b": {
+        "model": "Qwen/Qwen3-0.6B",
+        "tokenizer": "Qwen/Qwen3-0.6B",
+        "chat_template": "qwen-7b-chat",
+        "native_dtype": torch.bfloat16,
+        "tokens_to_add": {
+            "additional_special_tokens": [],
+        },
+        "find_unused_parameters": False,
+        "model_hidden_size": None,
+        "output_hidden_states": False,
+        "system_prompt": True,
+        "role": "assistant",
+        "watch_tokens": {
+            "bos_token": {151644: "<|im_start|>"},
+            "eos_token": {151645: "<|im_end|>"},
+            "response_start": {
+                "order": [151645, 198, 151644, 77091, 198],
+                151645: "<|im_end|>",
+                198: "Ċ",
+                151644: "<|im_start|>",
+                77091: "assistant",
+            },
+        },
+    },
+    "qwen3-1.7b": {
+        "model": "Qwen/Qwen3-1.7B",
+        "tokenizer": "Qwen/Qwen3-1.7B",
+        "chat_template": "qwen-7b-chat",
+        "native_dtype": torch.bfloat16,
+        "tokens_to_add": {
+            "additional_special_tokens": [],
+        },
+        "find_unused_parameters": False,
+        "model_hidden_size": None,
+        "output_hidden_states": False,
+        "system_prompt": True,
+        "role": "assistant",
+        "watch_tokens": {
+            "bos_token": {151644: "<|im_start|>"},
+            "eos_token": {151645: "<|im_end|>"},
+            "response_start": {
+                "order": [151645, 198, 151644, 77091, 198],
+                151645: "<|im_end|>",
+                198: "Ċ",
+                151644: "<|im_start|>",
+                77091: "assistant",
+            },
+        },
+    },
+    "qwen3-4b": {
+        "model": "Qwen/Qwen3-4B",
+        "tokenizer": "Qwen/Qwen3-4B",
+        "chat_template": "qwen-7b-chat",
+        "native_dtype": torch.bfloat16,
+        "tokens_to_add": {
+            "additional_special_tokens": [],
+        },
+        "find_unused_parameters": False,
+        "model_hidden_size": None,
+        "output_hidden_states": False,
+        "system_prompt": True,
+        "role": "assistant",
+        "watch_tokens": {
+            "bos_token": {151644: "<|im_start|>"},
+            "eos_token": {151645: "<|im_end|>"},
+            "response_start": {
+                "order": [151645, 198, 151644, 77091, 198],
+                151645: "<|im_end|>",
+                198: "Ċ",
+                151644: "<|im_start|>",
+                77091: "assistant",
+            },
+        },
+    },
+    "qwen3-8b": {
+        "model": "Qwen/Qwen3-8B",
+        "tokenizer": "Qwen/Qwen3-8B",
+        "chat_template": "qwen-7b-chat",
+        "native_dtype": torch.bfloat16,
+        "tokens_to_add": {
+            "additional_special_tokens": [],
+        },
+        "find_unused_parameters": False,
+        "model_hidden_size": None,
+        "output_hidden_states": False,
+        "system_prompt": True,
+        "role": "assistant",
+        "watch_tokens": {
+            "bos_token": {151644: "<|im_start|>"},
+            "eos_token": {151645: "<|im_end|>"},
+            "response_start": {
+                "order": [151645, 198, 151644, 77091, 198],
+                151645: "<|im_end|>",
+                198: "Ċ",
+                151644: "<|im_start|>",
+                77091: "assistant",
+            },
+        },
+    },
+  "qwen3.5-0.8b": {
         "model": "Qwen/Qwen3.5-0.8B",
         "tokenizer": "Qwen/Qwen3.5-0.8B",
         "chat_template": "qwen-7b-chat",
@@ -388,40 +488,6 @@ HF_LLMS = {
     },
 }
 
-VISION_ENCODERS = {
-    "clip-vit-base-patch32": {
-        "model": "openai/clip-vit-base-patch32",
-        "tokenizer": "openai/clip-vit-base-patch32",
-        "find_unused_parameters": False,
-        "strict": True,
-        "model_hidden_size": None,
-        "projection_dim": None,
-        "encoder_input_len": 77,
-        "output_hidden_states": True,
-    },
-    "siglip2-so400m-patch16-naflex": {
-        "model": "google/siglip2-so400m-patch16-naflex",
-        "tokenizer": "google/siglip2-so400m-patch16-naflex",
-        "find_unused_parameters": False,
-        "strict": True,
-        "model_hidden_size": None,
-        "projection_dim": None,
-        "encoder_input_len": 64,
-        "output_hidden_states": True,
-    },
-    "vit-base-patch16-224-in21k": {
-        "model": "google/vit-base-patch16-224-in21k",
-        "tokenizer": "google/vit-base-patch16-224-in21k",
-        "find_unused_parameters": False,
-        "strict": True,
-        "model_hidden_size": None,
-        "projection_dim": None,
-        "num_patches": None,
-        "encoder_input_len": None,
-        "output_hidden_states": True,
-    },
-}
-
 VISION_ENCODERS_INPUT_MAPPING = {
     "clip-vit-base-patch32": {
         "input_ids": "encoder_input_ids",
@@ -447,6 +513,19 @@ VISION_ENCODERS_INPUT_MAPPING = {
 SIGNAL_TOKEN_PLACEHOLDER = "<signal>"
 ECG_TOKEN_PREFIX = "signal_"
 RL_TOKENS = ["<think>", "</think>", "<answer>", "</answer>"]
+
+# ELM types that encode an ECG signal and inject it into the prompt at the
+# signal-token placeholder positions. This is every encoder-based ELM (see the
+# dispatch in elms/connect_nns.py) except the text-only "ecg_byte". Anything
+# that decides whether to insert the placeholder or attach encoder outputs must
+# use this single source of truth so the two decisions never disagree.
+SIGNAL_INJECTION_ELMS = frozenset({
+    "linear_llava",
+    "mlp_llava",
+    "base_elf",
+    "patch_elf",
+    "conv_elf",
+})
 
 # Encoders
 ECG_ENCODERS = {

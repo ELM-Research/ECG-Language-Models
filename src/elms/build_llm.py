@@ -30,6 +30,10 @@ class BuildLLM:
                 from elms.llms.qwen35.qwen35 import Qwen35
                 model = Qwen35(llm, self.pad_token_id, self.eos_token_id,
                                HF_LLMS[self.args.llm]["output_hidden_states"])
+            elif "qwen3" in self.args.llm:
+                from elms.llms.qwen3.qwen3 import Qwen3
+                model = Qwen3(llm, self.pad_token_id, self.eos_token_id,
+                              HF_LLMS[self.args.llm]["output_hidden_states"])
             elif "gemma-2" in self.args.llm:
                 from elms.llms.gemma2.gemma2 import Gemma2
                 model = Gemma2(llm, self.pad_token_id, self.eos_token_id,
