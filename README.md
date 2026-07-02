@@ -332,17 +332,9 @@ We list research projects that have been conducted using this repository. Please
 
 ## Contributions <a name="contributions"></a>
 
-We welcome contributions to the repository! Please feel free to open an issue or pull request for any bugs or features you would like to add. We are always looking for new ECG datasets to benchmark our methods on. If you have any recommendations, please let us know! Also, a good place to start is by looking at the [TODO](#todo) section.
+We welcome contributions to the repository! Please feel free to open an issue or pull request for any bugs or features you would like to add. We are always looking for new ECG datasets to benchmark our methods on. If you have any recommendations, please let us know!
 
-For most processes, we have a `--dev` flag to run in a smaller scale and add some verbosity for debugging. Feel free to add this flag when needed! 
-
-### Contributors
-
-We thank the following people for their contributions to the repository:
-
-- [Atharva Mhaskar](https://www.linkedin.com/in/atharva-mhaskar/)
-- [Xiaoyu (Simon) Song](https://www.linkedin.com/in/xiaoyu-song-507b89301/)
-- [Tony Chen](https://www.linkedin.com/in/tonychen06/)
+For most processes, we have a `--dev` flag to run in a smaller scale and add some verbosity for debugging. Feel free to add this flag when needed!
 
 ## Acknowledgements <a name="ack"></a>
 This work is done in collaboration with the Mario Lemieux Center for Heart Rhythm Care at Allegheny General Hospital.
