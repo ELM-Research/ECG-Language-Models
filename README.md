@@ -92,13 +92,11 @@ We utilize the following pretrained LLMs from HuggingFace.
 
 | LLM | `--llm` |
 |-------|--------------------|
-| [Llama 3](https://arxiv.org/abs/2407.21783) | `llama-3.2-3b-instruct` |
-| [Llama 3](https://arxiv.org/abs/2407.21783) | `llama-3.2-1b-instruct` |
+| [Llama 3](https://arxiv.org/abs/2407.21783) | `llama-3.2-{1, 3}b-instruct` |
 | [Gemma 2](https://arxiv.org/abs/2408.00118) | `gemma-2-2b-it` |
-| [Qwen 2.5](https://arxiv.org/abs/2412.15115) | `qwen2.5-7b-instruct` |
-| [Qwen 2.5](https://arxiv.org/abs/2412.15115) | `qwen2.5-3b-instruct` |
-| [Qwen 2.5](https://arxiv.org/abs/2412.15115) | `qwen2.5-1.5b-instruct` |
-| [Qwen 2.5](https://arxiv.org/abs/2412.15115) | `qwen2.5-0.5b-instruct` |
+| [Qwen 2.5](https://arxiv.org/abs/2412.15115) | `qwen2.5-{0.5, 1.5, 3, 7}b-instruct` |
+| [Qwen 3](https://arxiv.org/abs/2505.09388) | `qwen3-{0.6, 1.7, 4, 8}b` |
+| [Qwen 3.5](https://qwen.ai/blog?id=qwen3.5) | `qwen3.5-{0.8, 2, 4, 9}b` |
 
 ## Encoders <a name="encoders"></a>
 
@@ -118,8 +116,11 @@ We utilize the following pretrained vision encoders from HuggingFace.
 | Vision Encoders | `--encoder` | `--data_representation`|
 |-------|--------------------|-------|
 | [Siglip2](https://arxiv.org/abs/2303.15343) | `siglip2-so400m-patch16-naflex` | `rgb`, `stacked_signal` |
+| Siglip2 ECG | `siglip-ecg` | `signal` |
 | [ViT](https://arxiv.org/abs/2010.11929) | `vit-base-patch16-224-in21k` | `rgb`, `stacked_signal` |
 | [CLIP](https://arxiv.org/abs/2103.00020) | `clip-vit-base-patch32` | `rgb`, `stacked_signal` |
+
+**Note** For Siglip2 ECG (`--encoder siglip-ecg`), we have implemented our own variant for natively processing 12-lead ECGs. To pretrain it go to [ECG-Neural-Networks](https://github.com/ELM-Research/ECG-Neural-Networks). Check out `src/elms/vision_encoders/siglip_ecg/siglip_ecg.py` for more details.
 
 ## ELMs
 We implement several ELMs and describe how to train each variant.
