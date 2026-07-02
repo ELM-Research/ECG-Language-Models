@@ -250,7 +250,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
 ```
 
 ### RL
-Group-relative policy-gradient finetuning (SAPO) on top of an SFT checkpoint. Each prompt is rolled out `--rl_group_size` times and advantages are computed within the group.
+RL training on top of an SFT checkpoint.
 
 ```bash
 uv run torchrun --standalone --nproc_per_node=$NPROC \
