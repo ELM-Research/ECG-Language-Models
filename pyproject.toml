@@ -38,6 +38,7 @@ dependencies = [
     "google-genai>=1.73.1",
     "openai>=2.32.0",
     "flash-linear-attention>=0.5.1",
+    "tilelang>=0.1.11",
 ]
 
 [tool.ruff.lint]
