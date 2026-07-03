@@ -484,6 +484,50 @@ HF_LLMS = {
     },
 }
 
+VISION_ENCODERS = {
+    "clip-vit-base-patch32": {
+        "model": "openai/clip-vit-base-patch32",
+        "tokenizer": "openai/clip-vit-base-patch32",
+        "find_unused_parameters": False,
+        "strict": True,
+        "model_hidden_size": None,
+        "projection_dim": None,
+        "encoder_input_len": 77,
+        "output_hidden_states": True,
+    },
+    "siglip2-so400m-patch16-naflex": {
+        "model": "google/siglip2-so400m-patch16-naflex",
+        "tokenizer": "google/siglip2-so400m-patch16-naflex",
+        "find_unused_parameters": False,
+        "strict": True,
+        "model_hidden_size": None,
+        "projection_dim": None,
+        "encoder_input_len": 64,
+        "output_hidden_states": True,
+    },
+    "siglip-ecg": {
+        "model": "google/siglip2-base-patch16-naflex",
+        "tokenizer": None,
+        "find_unused_parameters": False,
+        "strict": False,
+        "model_hidden_size": None,
+        "projection_dim": None,
+        "encoder_input_len": None,
+        "output_hidden_states": True,
+    },
+    "vit-base-patch16-224-in21k": {
+        "model": "google/vit-base-patch16-224-in21k",
+        "tokenizer": "google/vit-base-patch16-224-in21k",
+        "find_unused_parameters": False,
+        "strict": True,
+        "model_hidden_size": None,
+        "projection_dim": None,
+        "num_patches": None,
+        "encoder_input_len": None,
+        "output_hidden_states": True,
+    },
+}
+
 VISION_ENCODERS_INPUT_MAPPING = {
     "clip-vit-base-patch32": {
         "input_ids": "encoder_input_ids",
