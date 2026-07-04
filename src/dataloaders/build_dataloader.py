@@ -2,10 +2,10 @@ import argparse
 import numpy as np
 import torch
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split, Subset
 from collections.abc import Mapping, Sequence
 
-from utils.gpu_manager import get_world_size, get_rank
+from utils.gpu_manager import get_world_size, get_rank, is_main
 
 from dataloaders.dataset_mixer import DatasetMixer
 
@@ -17,16 +17,33 @@ class BuildDataLoader:
     ):
         self.args = args
         self.dataset_mixer = DatasetMixer(self.args)
+        self.dataset = None
         self.val_dataloader = None
 
     def build_dataloader(
         self,
     ):
-        train_dataset, val_dataset = self.dataset_mixer.build_torch_dataset()
-        torch_data_loader = self.build_torch_dataloader(train_dataset)
+        self.dataset = self.dataset_mixer.build_torch_dataset()
+        train_dataset, val_dataset = self.split_train_val(self.dataset)
         if val_dataset is not None:
             self.val_dataloader = self.build_torch_dataloader(val_dataset, is_val=True)
-        return torch_data_loader
+        return self.build_torch_dataloader(train_dataset)
+
+    def split_train_val(self, dataset):
+        val_split = getattr(self.args, "val_split", None)
+        if not val_split or "train" not in self.args.mode or getattr(self.args, "train_phase", "sft") == "rl":
+            return dataset, None
+        n_total = len(dataset)
+        n_val = int(n_total * val_split) if val_split < 1 else int(val_split)
+        n_val = max(0, min(n_val, n_total))
+        if n_val == 0:
+            return dataset, None
+        generator = torch.Generator().manual_seed(self.args.seed)
+        train_dataset, val_subset = random_split(dataset, [n_total - n_val, n_val], generator=generator)
+        val_dataset = Subset(dataset.without_augmentation(), val_subset.indices)
+        if is_main():
+            print(f"Validation split: {len(train_dataset)} train / {len(val_dataset)} val (val_split={val_split})")
+        return train_dataset, val_dataset
 
     def build_torch_dataloader(self, torch_dataset, is_val=False):
         sampler = self.get_torch_dataloader_sampler(torch_dataset, shuffle=not is_val)

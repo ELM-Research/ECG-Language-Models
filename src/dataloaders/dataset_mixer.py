@@ -1,7 +1,5 @@
 from datasets import load_dataset
-import copy
 import json
-import random
 from transformers import AutoTokenizer, AutoProcessor
 
 from utils.dir_file_manager import DirFileManager
@@ -29,58 +27,27 @@ class DatasetMixer:
             print(f"Using {self.args.data_representation} representation")
         encoder_tokenizer_components = self.build_encoder_tokenizer()
         llm_tokenizer_components = self.build_llm_tokenizer()
-        train_data, val_data = self.split_train_val(data)
-        train_dataset = self.build_data_representation(train_data, llm_tokenizer_components,
-                                                       encoder_tokenizer_components)
-        val_dataset = (self.build_data_representation(val_data, llm_tokenizer_components,
-                                                      encoder_tokenizer_components,
-                                                      args=self.no_augment_args())
-                       if val_data else None)
-        return train_dataset, val_dataset
-
-    def no_augment_args(self):
-        val_args = copy.copy(self.args)
-        val_args.augment_ecg = False
-        val_args.augment_rgb = False
-        return val_args
-
-    def split_train_val(self, data):
-        val_split = getattr(self.args, "val_split", None)
-        if not val_split or "train" not in self.args.mode:
-            return data, None
-        n_total = len(data)
-        n_val = int(n_total * val_split) if val_split < 1 else int(val_split)
-        n_val = max(0, min(n_val, n_total))
-        if n_val == 0:
-            return data, None
-        # seeded shuffle => identical split across ranks
-        indices = list(range(n_total))
-        random.Random(self.args.seed).shuffle(indices)
-        val_data = [data[i] for i in indices[:n_val]]
-        train_data = [data[i] for i in indices[n_val:]]
-        if is_main():
-            print(f"Validation split: {len(train_data)} train / {len(val_data)} val (val_split={val_split})")
-        return train_data, val_data
+        return self.build_data_representation(data, llm_tokenizer_components,
+                                              encoder_tokenizer_components)
 
     def build_data_representation(self, data, llm_tokenizer_components,
-                                  encoder_tokenizer_components, args=None):
-        args = args if args is not None else self.args
-        if args.data_representation == "signal":
+                                  encoder_tokenizer_components):
+        if self.args.data_representation == "signal":
             from dataloaders.data_representation.signal import Signal
-            return Signal(data, llm_tokenizer_components, args)
-        elif args.data_representation == "symbolic":
+            return Signal(data, llm_tokenizer_components, self.args)
+        elif self.args.data_representation == "symbolic":
             from dataloaders.data_representation.symbolic import Symbolic
-            return Symbolic(data, llm_tokenizer_components, args)
-        elif args.data_representation == "stacked_signal":
+            return Symbolic(data, llm_tokenizer_components, self.args)
+        elif self.args.data_representation == "stacked_signal":
             from dataloaders.data_representation.stacked_signal import StackedSignal
             return StackedSignal(data, llm_tokenizer_components,
-                                 encoder_tokenizer_components, args)
-        elif args.data_representation == "rgb":
+                                 encoder_tokenizer_components, self.args)
+        elif self.args.data_representation == "rgb":
             from dataloaders.data_representation.rgb import RGB
             return RGB(data, llm_tokenizer_components,
-                       encoder_tokenizer_components, args)
+                       encoder_tokenizer_components, self.args)
 
-        raise ValueError(f"Unknown data representation: {args.data_representation}")
+        raise ValueError(f"Unknown data representation: {self.args.data_representation}")
 
     def build_hf_dataset(self, data_name):
         if self.args.mode in ["train", "post_train"]:

@@ -1,4 +1,5 @@
 from torch.utils.data import Dataset
+import copy
 import random
 import numpy as np
 from typing import List, Tuple
@@ -34,6 +35,13 @@ class Base(Dataset):
 
     def __len__(self):
         return len(self.data)
+
+    def without_augmentation(self):
+        view = copy.copy(self)
+        view.args = copy.copy(self.args)
+        view.args.augment_ecg = False
+        view.args.augment_rgb = False
+        return view
 
     ### ENCODER TRAINING FUNCTIONS ###
     def prepare_clip_input(self, diagnostic_report: str, ecg_image: Image.Image):
