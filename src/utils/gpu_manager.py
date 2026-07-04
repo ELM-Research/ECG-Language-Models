@@ -70,6 +70,46 @@ def train_dev_break(enabled: bool, batch: dict, loss_value: float) -> bool:
     return broadcast_value(should_break, src=0)
 
 
+def assert_max_batch_fits(model, batch: dict, args, optimizer=None, margin: float = 0.10) -> None:
+    if batch is None or not torch.cuda.is_available():
+        return
+    F, ids = torch.nn.functional, batch["elm_input_ids"]
+    pad = args.llm_input_len - ids.shape[1]
+    if pad <= 0:
+        return  # first batch already at the cap; training itself already stresses it
+    probe = dict(batch)
+    probe["elm_input_ids"] = F.pad(ids, (pad, 0), value=int(ids.reshape(-1)[0]))
+    probe["elm_attention_mask"] = F.pad(batch["elm_attention_mask"], (pad, 0), value=0)
+    if "elm_labels" in batch:
+        probe["elm_labels"] = F.pad(batch["elm_labels"], (pad, 0), value=-100)
+    if "signal_id_indices" in batch:
+        probe["signal_id_indices"] = torch.where(batch["signal_id_indices"] >= 0, batch["signal_id_indices"] + pad, batch["signal_id_indices"])
+    device = next(model.parameters()).device
+    probe = {k: batch_to_device(v, device) for k, v in probe.items()}
+    torch.cuda.reset_peak_memory_stats(device)
+    try:
+        model(**probe).loss.backward()
+    except torch.cuda.OutOfMemoryError as e:
+        raise RuntimeError(f"[fit-check] worst-case batch (batch_size={ids.shape[0]} x llm_input_len="
+                           f"{args.llm_input_len}) does not fit; lower --batch_size / --llm_input_len or "
+                           f"add --gradient_checkpointing. ({e})") from e
+    finally:
+        model.zero_grad(set_to_none=True)
+        torch.cuda.empty_cache()
+    # backward peak (params + grads + activations) + optimizer state resident during real steps
+    opt_bytes = optimizer.estimated_state_bytes() if optimizer is not None else 0
+    peak = torch.cuda.max_memory_allocated(device) + opt_bytes
+    free, _ = torch.cuda.mem_get_info(device)
+    budget = free + torch.cuda.memory_allocated(device)  # free accounts for other processes; + our resident params
+    gb = 1024 ** 3
+    if peak * (1 + margin) > budget:
+        raise RuntimeError(f"[fit-check] worst-case peak ~{peak / gb:.1f} GB (incl. optimizer state) leaves "
+                           f"<{margin:.0%} headroom of {budget / gb:.1f} GB available; lower --batch_size / "
+                           f"--llm_input_len or add --gradient_checkpointing.")
+    if is_main():
+        print(f"[fit-check] OK: worst-case ~{peak / gb:.1f} GB / {budget / gb:.1f} GB available ({margin:.0%} margin kept).")
+
+
 class GPUSetup:
     def __init__(self, args: argparse.Namespace):
         self.args = args

@@ -13,7 +13,7 @@ from runners.rl_trainer import run_rl_train
 
 from utils.checkpoint_manager import CheckpointManager
 from utils.seed_manager import set_seed
-from utils.gpu_manager import is_main, init_dist, cleanup, GPUSetup, broadcast_value
+from utils.gpu_manager import is_main, init_dist, cleanup, GPUSetup, broadcast_value, assert_max_batch_fits
 from utils.dir_file_manager import setup_experiment_folders
 from utils.wandb_manager import setup_wandb, cleanup_wandb
 
@@ -67,6 +67,8 @@ def main():
         if args.resume_ckpt and checkpoint_manager:
             start_epoch = checkpoint_manager.resume_checkpoint(args.resume_ckpt, elm, optimizer)
         runner = run_rl_train if getattr(args, "train_phase", "sft") == "rl" else run_train
+        if not args.dev and runner is run_train:
+            assert_max_batch_fits(elm, next(iter(dataloader)), args, optimizer)
         for epoch in range(start_epoch, args.epochs):
             train_result = runner(elm, optimizer, dataloader, epoch, args, checkpoint_manager)
             should_stop = False

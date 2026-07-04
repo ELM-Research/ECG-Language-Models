@@ -143,6 +143,15 @@ class Optimizer:
 
         return MuonAdamW(muon_opt, adamw_opt, adamw_lr_ratio)
 
+    def estimated_state_bytes(self) -> int:
+        """Resident optimizer-state bytes once allocated: Adam/AdamW keep 2 tensors
+        (exp_avg, exp_avg_sq) per param; Muon keeps 1 momentum buffer per param."""
+        def nbytes(param_groups, per_param):
+            return per_param * sum(p.numel() * p.element_size() for g in param_groups for p in g["params"])
+        if self._is_muon:
+            return nbytes(self.optimizer.muon.param_groups, 1) + nbytes(self.optimizer.adamw.param_groups, 2)
+        return nbytes(self.optimizer.param_groups, 2)
+
     def _log_config(self):
         if is_main():
             if self._is_muon:
