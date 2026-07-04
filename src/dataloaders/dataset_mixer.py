@@ -1,4 +1,5 @@
 from datasets import load_dataset
+import copy
 import json
 import random
 from transformers import AutoTokenizer, AutoProcessor
@@ -32,9 +33,16 @@ class DatasetMixer:
         train_dataset = self.build_data_representation(train_data, llm_tokenizer_components,
                                                        encoder_tokenizer_components)
         val_dataset = (self.build_data_representation(val_data, llm_tokenizer_components,
-                                                      encoder_tokenizer_components)
+                                                      encoder_tokenizer_components,
+                                                      args=self.no_augment_args())
                        if val_data else None)
         return train_dataset, val_dataset
+
+    def no_augment_args(self):
+        val_args = copy.copy(self.args)
+        val_args.augment_ecg = False
+        val_args.augment_rgb = False
+        return val_args
 
     def split_train_val(self, data):
         val_split = getattr(self.args, "val_split", None)
@@ -55,23 +63,24 @@ class DatasetMixer:
         return train_data, val_data
 
     def build_data_representation(self, data, llm_tokenizer_components,
-                                  encoder_tokenizer_components):
-        if self.args.data_representation == "signal":
+                                  encoder_tokenizer_components, args=None):
+        args = args if args is not None else self.args
+        if args.data_representation == "signal":
             from dataloaders.data_representation.signal import Signal
-            return Signal(data, llm_tokenizer_components, self.args)
-        elif self.args.data_representation == "symbolic":
+            return Signal(data, llm_tokenizer_components, args)
+        elif args.data_representation == "symbolic":
             from dataloaders.data_representation.symbolic import Symbolic
-            return Symbolic(data, llm_tokenizer_components, self.args)
-        elif self.args.data_representation == "stacked_signal":
+            return Symbolic(data, llm_tokenizer_components, args)
+        elif args.data_representation == "stacked_signal":
             from dataloaders.data_representation.stacked_signal import StackedSignal
             return StackedSignal(data, llm_tokenizer_components,
-                                 encoder_tokenizer_components, self.args)
-        elif self.args.data_representation == "rgb":
+                                 encoder_tokenizer_components, args)
+        elif args.data_representation == "rgb":
             from dataloaders.data_representation.rgb import RGB
             return RGB(data, llm_tokenizer_components,
-                       encoder_tokenizer_components, self.args)
+                       encoder_tokenizer_components, args)
 
-        raise ValueError(f"Unknown data representation: {self.args.data_representation}")
+        raise ValueError(f"Unknown data representation: {args.data_representation}")
 
     def build_hf_dataset(self, data_name):
         if self.args.mode in ["train", "post_train"]:
