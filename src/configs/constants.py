@@ -609,8 +609,7 @@ LEADING_PREFIX_RE = re.compile(
     flags=re.IGNORECASE,
 )
 TAG_RE = re.compile(r"<\s*(?:ecg|image)\s*>\s*\n?", flags=re.IGNORECASE)
-IMAGE_WORD_RE = re.compile(r"\b(image)\b", flags=re.IGNORECASE)
-
+IMAGE_WORD_RE = re.compile(r"\b(image|picture)\b", flags=re.IGNORECASE)
 
 def case_preserving_signal(m: re.Match) -> str:
     w = m.group(1)
