@@ -26,6 +26,7 @@ class BuildDataLoader:
         return torch_data_loader
 
     def build_torch_dataloader(self, torch_dataset):
+        self.dataset = torch_dataset
         sampler = self.get_torch_dataloader_sampler(torch_dataset)
         if "train" in self.args.mode:
             torch_data_loader = DataLoader(
@@ -64,6 +65,8 @@ class BuildDataLoader:
         batch = [item for item in batch if item is not None]
         if len(batch) == 0:
             return None
+        max_len = max(item["elm_input_ids"].shape[0] for item in batch)
+        batch = [self.dataset.pad_to_batch(item, max_len) for item in batch]
         self._assert_same_structure_and_shapes(batch)
         return torch.utils.data.dataloader.default_collate(batch)
 
