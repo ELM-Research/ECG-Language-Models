@@ -32,7 +32,9 @@ class ConnectNN:
     def connect_nn(
         self,
     ):
-        if self.args.elm in ["linear_llava", "mlp_llava"]:
+        if self.args.elm  == "mlp_llava":
+            encoder_llm_components = self.build_mlp_llava()
+        elif self.args.elm == "linear_llava":
             encoder_llm_components = self.build_linear_llava()
         elif self.args.elm == "base_elf":
             encoder_llm_components = self.build_base_elf()
@@ -49,6 +51,21 @@ class ConnectNN:
             allow_override=("find_unused_parameters",),
         )
 
+    def build_mlp_llava(
+        self,
+    ):
+        from elms.llm_encoders.llava import LLaVA
+        if self.args.encoder in VISION_ENCODERS:
+            projection_dim = VISION_ENCODERS[self.args.encoder]["projection_dim"]
+        else:
+            projection_dim = ECG_ENCODERS[self.args.encoder]["projection_dim"]
+        projection_layer = MLPProjection(projection_dim, self.args.llm)
+        encoder_llm = LLaVA(
+            self.llm_components["llm"], self.encoder_components["encoder"],
+            projection_layer, set(self.args.update),
+            True if self.args.perturb == "only_text" else False)
+        return {"elm": encoder_llm}
+
     def build_linear_llava(
         self,
     ):
@@ -57,7 +74,7 @@ class ConnectNN:
             projection_dim = VISION_ENCODERS[self.args.encoder]["projection_dim"]
         else:
             projection_dim = ECG_ENCODERS[self.args.encoder]["projection_dim"]
-        projection_layer = MLPProjection(projection_dim, self.args.llm) if self.args.elm == "mlp_llava" else LinearProjection(projection_dim, self.args.llm)
+        projection_layer = LinearProjection(projection_dim, self.args.llm)
         encoder_llm = LLaVA(
             self.llm_components["llm"], self.encoder_components["encoder"],
             projection_layer, set(self.args.update),
