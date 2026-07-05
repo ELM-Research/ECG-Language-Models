@@ -1,209 +1,144 @@
 #!/usr/bin/env python3
-"""Minimal bridge: run ECG-Language-Models on ECG-Reasoning-Benchmark inference.py."""
+"""Step 1/2: run a trained ELM over ECG-Reasoning-Benchmark and save its responses.
 
+Registers the ELM as the benchmark model ``ecglm`` and hands the multi-turn,
+teacher-forced protocol (default and ``--inference-mode forced-commit``) to the
+benchmark's own driver, which writes one ``<id>.json`` per sample under
+``<output-dir>/ecglm/<dataset>/<target_dx>/``. Score those files afterwards with
+``scripts/eval_ecg_reasoning_openrouter.py``.
+
+Example:
+    uv run scripts/run_ecg_reasoning_bench.py ./ecg-reasoning-benchmark/data \
+        --dataset mimic_iv_ecg --ecg-base-dir ../data/mimic_iv/ \
+        --output-dir ./results --enable-condensed-chat \
+        --llm qwen2.5-3b-instruct --encoder st_mem --elm mlp_llava \
+        --num-encoder-tokens 50 --explicit-thinking \
+        --elm-ckpt src/runs/.../epoch_best.pt
+"""
 import argparse
-import importlib.util
 import os
+import re
 import sys
-from types import SimpleNamespace
 
 import torch
 
-REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
-SRC_DIR = os.path.join(REPO_ROOT, "src")
-if SRC_DIR not in sys.path:
-    sys.path.insert(0, SRC_DIR)
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (os.path.join(REPO, "src"), os.path.join(REPO, "ecg-reasoning-benchmark")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
-from elms.build_elm import BuildELM
-from main_chat import build_chat_template, build_tokenizer, decode_response, prepare_generation_input
-from configs.constants import SIGNAL_TOKEN_PLACEHOLDER
+from configs.constants import HF_LLMS, SIGNAL_TOKEN_PLACEHOLDER  # noqa: E402
+from elms.build_elm import BuildELM  # noqa: E402
+from main_chat import build_chat_template, build_tokenizer, prepare_generation_input  # noqa: E402
+from ecg_reasoning_benchmark.inference import get_parser  # noqa: E402
+from ecg_reasoning_benchmark.inference import main as run_inference  # noqa: E402
+from ecg_reasoning_benchmark.models import BaseModel, register_model  # noqa: E402
 
-def _pick_option(text: str, options: list[str]) -> str:
-    norm = lambda s: " ".join(s.lower().split())
-    t = norm(text)
-    exact = {norm(o): o for o in options}
-    if t in exact:
-        return exact[t]
-    for o in options:
-        if norm(o) in t:
-            return o
-    if options and options == ["Yes", "No"]:
-        if "yes" in t:
-            return "Yes"
-        if "no" in t:
-            return "No"
-    return options[0]
+_ANSWER = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
+_THINK = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
 
-def _fit_signal_len(ecg: torch.Tensor | None, target_len: int | None) -> torch.Tensor | None:
-    if ecg is None or target_len is None or ecg.shape[-1] == target_len:
-        return ecg
-    if ecg.shape[-1] > target_len:
-        return ecg[..., :target_len]
-    return torch.nn.functional.pad(ecg, (0, target_len - ecg.shape[-1]))
+def extract_answer(text: str) -> str:
+    """Return the final answer from a plain or ``<think>``/``<answer>`` RL response."""
+    if "</think>" in text and "<think>" not in text:
+        text = "<think>\n" + text  # explicit-thinking opener was consumed as the prompt prefix
+    answer, think = _ANSWER.search(text), _THINK.search(text)
+    text = answer.group(1) if answer else (text[think.end():] if think else text)
+    return re.sub(r"</?(?:think|answer)>", "", text).strip()
 
 
-class BaseModel:
+@register_model("ecglm")
+class ELM(BaseModel):
     ecg_modality_base = "signal"
 
-    @classmethod
-    def build_model(cls, model_variant=None):
-        raise NotImplementedError
-
-    def get_response(self, conversation, **kwargs) -> str:
-        raise NotImplementedError
-
-    @classmethod
-    def require_base64_image(cls):
-        return False
-
-
-class ECGLMModel(BaseModel):
-    ecg_modality_base = "signal"
-
-    def __init__(self, **kwargs):
-        cfg = SimpleNamespace(
-            llm=kwargs["llm"],
-            encoder=kwargs["encoder"],
-            elm=kwargs["elm"],
-            encoder_ckpt=kwargs.get("encoder_ckpt"),
-            elm_ckpt=kwargs["elm_ckpt"],
-            num_encoder_tokens=kwargs.get("num_encoder_tokens", 50),
-            system_prompt=kwargs.get("system_prompt"),
-            segment_len = kwargs.get("segment_len"),
-            update = kwargs.get("update"),
-            perturb = kwargs.get("perturb"),
-            data_representation="signal",
-            attention_type="sdpa",
-            scratch=False,
-            peft=False,
-            dev=False,
-            device=kwargs.get("device"),
-            leads=list(range(12)),
-            norm_eps=1e-6,
-            explicit_thinking=False,
-            train_phase= "rl",
-        )
-        self.args = cfg
-        self.tokenizer = build_tokenizer(cfg)
-        self.prompt_template = build_chat_template(cfg)
-        self.elm = BuildELM(cfg).build_elm(self.tokenizer)["elm"].eval()
-        self.device = torch.device(cfg.device or ("cuda" if torch.cuda.is_available() else "cpu"))
-        self.elm.to(self.device)
+    def __init__(self, args: argparse.Namespace):
+        self.args = args
+        self.device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self.tokenizer = build_tokenizer(args)
+        self.template = build_chat_template(args)
+        self.elm = BuildELM(args).build_elm(self.tokenizer)["elm"].to(self.device).eval()
+        self.placeholder = SIGNAL_TOKEN_PLACEHOLDER * args.num_encoder_tokens + "\n"
+        wt = HF_LLMS[args.llm]["watch_tokens"]
+        ids = lambda e: set(e.keys() if isinstance(e, dict) else e)  # noqa: E731
+        self.stop_ids = ids(wt["eos_token"]) | ids(wt.get("final_eos_token", ()))
 
     @classmethod
-    def build_model(cls, **kwargs):
-        return cls(**kwargs)
+    def build_model(cls, **kwargs) -> "ELM":
+        args = argparse.Namespace(**kwargs)
+        args.data_representation = "signal"
+        args.leads = list(range(12))
+        args.attention_type = "sdpa"
+        args.norm_eps = 1e-6
+        args.lora_rank, args.lora_alpha = 16, 32
+        args.scratch = args.peft = args.dev = args.distributed = args.gradient_checkpointing = False
+        return cls(args)
 
-    def get_response(self, conversation, **kwargs) -> str:
-        prompt = self.prompt_template.copy()
-        ecg = None
-        first_user = True
-        for turn in conversation.conversation:
-            if turn["role"] == "system":
-                continue
-            if turn["role"] == "user":
-                msg = f"Question: {turn['question']}\nOptions:\n" + "\n".join(f"- {o}" for o in turn["options"])
-                msg += "\nAnswer with exactly one option text."
-                if first_user:
-                    sig = f"{SIGNAL_TOKEN_PLACEHOLDER}" * self.args.num_encoder_tokens
-                    msg = f"{sig.strip()}\n{msg}"
-                    ecg = _fit_signal_len(turn.get("signal"), self.args.segment_len)
-                    first_user = False
-                prompt.append_message(prompt.roles[0], msg)
-            else:
+    def _prepare_signal(self, signal: torch.Tensor) -> torch.Tensor:
+        """Match training preprocessing: decimate 500->250 Hz, fit segment_len, min-max to [0, 1]."""
+        seg = self.args.segment_len
+        signal = signal.to(torch.float32)
+        signal = signal[:, :: max(1, signal.shape[-1] // seg)][:, :seg]
+        lo, hi = signal.min(), signal.max()
+        signal = ((signal - lo) / (hi - lo + self.args.norm_eps)).clamp(0, 1)
+        if signal.shape[-1] < seg:  # only trips if a signal is shorter than segment_len; pad baseline
+            signal = torch.nn.functional.pad(signal, (0, seg - signal.shape[-1]))
+        return signal.flatten() if self.args.elm == "base_elf" else signal
+
+    def _decode(self, prompt_ids: list[int], output: torch.Tensor) -> str:
+        cont = output[0].cpu().tolist()
+        if cont[: len(prompt_ids)] == prompt_ids:  # defensive: strip an echoed prompt
+            cont = cont[len(prompt_ids):]
+        cut = next((i for i, t in enumerate(cont) if t in self.stop_ids), len(cont))
+        return self.tokenizer.decode(cont[:cut], skip_special_tokens=False, clean_up_tokenization_spaces=True)
+
+    def get_response(self, conversation, enable_condensed_chat: bool = False, verbose: bool = False, **kwargs) -> str:
+        turns = conversation.get_turns_for_prompt()
+        prompt, signal = self.template.copy(), None
+        for i, turn in enumerate(turns):
+            if turn.get("role") == "model":
                 prompt.append_message(prompt.roles[1], turn["text"])
+                continue
+            message = f"Question: {turn['question']}"
+            if not enable_condensed_chat or i == len(turns) - 1:  # condensed chat: options on the live turn only
+                message += "\nOptions:\n" + "\n".join(f"- {o}" for o in turn["options"])
+                message += "\nRespond with exactly one of the options."
+            if "signal" in turn:  # the ECG rides on the first (initial-diagnostic) user turn
+                signal = self._prepare_signal(turn["signal"])
+                message = self.placeholder + message
+            prompt.append_message(prompt.roles[0], message)
         prompt.append_message(prompt.roles[1], None)
+
         prompt_str = prompt.get_prompt()
+        if self.args.explicit_thinking:
+            prompt_str += "<think>\n"
         with torch.no_grad():
-            batch, in_ids = prepare_generation_input(prompt_str, self.tokenizer, ecg, self.args, self.device)
-            out = self.elm.generate(**batch, max_new_tokens=kwargs.get("max_new_tokens", 1024))
-        text = decode_response(in_ids, out, self.tokenizer, self.args)
-        return _pick_option(text, conversation.conversation[-1]["options"])
-
-    @classmethod
-    def require_base64_image(cls):
-        return False
+            batch, prompt_ids = prepare_generation_input(prompt_str, self.tokenizer, signal, self.args, self.device)
+            output = self.elm.generate(**batch, max_new_tokens=self.args.max_new_tokens)
+        answer = extract_answer(self._decode(prompt_ids, output))
+        if verbose:
+            print(f"Q: {turns[-1]['question']}\nA: {answer}\n")
+        return answer
 
 
-def install_models_shim(default_model_kwargs=None):
-    import types
-
-    default_model_kwargs = default_model_kwargs or {}
-    shim = types.ModuleType("models")
-
-    def get_model_name(model):
-        return "ecglm"
-
-    def build_model(model_name: str, **kwargs):
-        if model_name != "ecglm":
-            raise ValueError(f"Only model='ecglm' is supported by this bridge, got: {model_name}")
-        merged_kwargs = {**default_model_kwargs, **kwargs}
-        return ECGLMModel.build_model(**merged_kwargs)
-
-    shim.BaseModel = BaseModel
-    shim.build_model = build_model
-    shim.get_model_name = get_model_name
-    sys.modules["models"] = shim
-
-
-def install_erb_utils_module(erb_dir: str):
-    utils_path = os.path.join(erb_dir, "utils.py")
-    spec = importlib.util.spec_from_file_location("utils", utils_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Could not load ERB utils module from: {utils_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    sys.modules["utils"] = module
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--erb-dir", default=os.path.join(REPO_ROOT, "ecg-reasoning-benchmark"))
+def main() -> None:
+    parser = get_parser()
     parser.add_argument("--llm", required=True)
     parser.add_argument("--encoder", required=True)
     parser.add_argument("--elm", required=True)
     parser.add_argument("--elm-ckpt", required=True)
-    parser.add_argument("--encoder-ckpt")
-    parser.add_argument("--system-prompt", default=os.path.join(SRC_DIR, "dataloaders/system_prompts/system_prompt_think.txt"))
-    parser.add_argument("--device")
-    parser.add_argument("--explicit_thinking", action="store_true", default=None, help="explicit thinking")
-    parser.add_argument("--segment_len", type=int, default=2500, help="ECG Segment Length")
+    parser.add_argument("--encoder-ckpt", default=None)
+    parser.add_argument("--system-prompt", default=os.path.join(REPO, "src/dataloaders/system_prompts/system_prompt_think.txt"))
     parser.add_argument("--num-encoder-tokens", type=int, default=50)
-    parser.add_argument("--update", type=str, nargs="+", default=["connector", "llm"],
-                            choices=["encoder", "connector", "llm"], help="Components to update (default: connector llm)")
-    parser.add_argument("--perturb", type=str, default=None, choices=["noise", "zeros", "only_text"],
-                            help="Please choose the perturbation you want to apply into the neural network.")
-    args, passthrough = parser.parse_known_args()
-    if passthrough and passthrough[0] == "--":
-        passthrough = passthrough[1:]
-    default_model_kwargs = {
-        "llm": args.llm,
-        "encoder": args.encoder,
-        "elm": args.elm,
-        "elm_ckpt": args.elm_ckpt,
-        "encoder_ckpt": args.encoder_ckpt,
-        "system_prompt": args.system_prompt,
-        "device": args.device,
-        "num_encoder_tokens": args.num_encoder_tokens,
-        "segment_len": args.segment_len,
-        "update": args.update,
-        "perturb": args.perturb,
-        "explicit_thinking": args.explicit_thinking
-    }
-
-    if args.erb_dir not in sys.path:
-        sys.path.insert(0, args.erb_dir)
-    install_models_shim(default_model_kwargs=default_model_kwargs)
-    install_erb_utils_module(args.erb_dir)
-    from inference import get_parser, main as erb_main  # pylint: disable=import-error
-
-    erb_args = get_parser().parse_args(passthrough)
-    erb_args.model = "ecglm"
-    for k in ["llm", "explicit_thinking", "encoder", "elm", "elm_ckpt", "encoder_ckpt", "system_prompt",
-              "device", "num_encoder_tokens", "segment_len", "update", "perturb"]:
-        setattr(erb_args, k, getattr(args, k))
-    erb_main(erb_args)
+    parser.add_argument("--segment-len", type=int, default=2500)
+    parser.add_argument("--update", nargs="+", default=["connector", "llm"], choices=["encoder", "connector", "llm"])
+    parser.add_argument("--perturb", default=None, choices=["noise", "zeros", "only_text"])
+    parser.add_argument("--train-phase", default="sft", choices=["pretrain", "sft", "rl"])
+    parser.add_argument("--explicit-thinking", action="store_true")
+    parser.add_argument("--max-new-tokens", type=int, default=1024)
+    parser.add_argument("--device", default=None)
+    args = parser.parse_args()
+    args.model = "ecglm"
+    run_inference(args)
 
 
 if __name__ == "__main__":
