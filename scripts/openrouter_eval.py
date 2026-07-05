@@ -1,209 +1,82 @@
 #!/usr/bin/env python3
-"""Minimal bridge: run ECG-Language-Models on ECG-Reasoning-Benchmark inference.py."""
+"""Step 2/2: LLM-judge scoring of curated ELM responses via the OpenRouter API.
 
+Registers an OpenAI-compatible ``openrouter`` evaluator with the benchmark and
+delegates metric aggregation / CSV export to the benchmark's evaluation driver.
+Point it at the ``--output-dir`` produced by ``scripts/run_ecg_reasoning_bench.py``.
+
+Example:
+    OPENROUTER_API_KEY=... uv run scripts/eval_ecg_reasoning_openrouter.py ./results \
+        --dataset mimic_iv_ecg --model ecglm --evaluator openrouter \
+        --openrouter-model google/gemini-2.5-flash --save-dir ./eval
+"""
 import argparse
-import importlib.util
 import os
 import sys
-from types import SimpleNamespace
 
-import torch
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(REPO, "ecg-reasoning-benchmark"))
 
-REPO_ROOT = os.path.dirname(os.path.dirname(__file__))
-SRC_DIR = os.path.join(REPO_ROOT, "src")
-if SRC_DIR not in sys.path:
-    sys.path.insert(0, SRC_DIR)
+from openai import OpenAI  # noqa: E402
+from tenacity import retry, stop_after_attempt, wait_exponential  # noqa: E402
+from ecg_reasoning_benchmark.evaluation import main  # noqa: E402
+from ecg_reasoning_benchmark.evaluators import Evaluator, register_evaluator  # noqa: E402
 
-from elms.build_elm import BuildELM
-from main_chat import build_chat_template, build_tokenizer, decode_response, prepare_generation_input
-from configs.constants import SIGNAL_TOKEN_PLACEHOLDER
+JUDGE_PROMPT = """You are a board-certified Cardiologist and an expert in ECG interpretation.
+Your task is to evaluate whether the [Model Response] is **clinically aligned** with the [Ground Truth].
 
-def _pick_option(text: str, options: list[str]) -> str:
-    norm = lambda s: " ".join(s.lower().split())
-    t = norm(text)
-    exact = {norm(o): o for o in options}
-    if t in exact:
-        return exact[t]
-    for o in options:
-        if norm(o) in t:
-            return o
-    if options and options == ["Yes", "No"]:
-        if "yes" in t:
-            return "Yes"
-        if "no" in t:
-            return "No"
-    return options[0]
+**[Context]**
+- Question: {}
+- Ground Truth (GT): {}
+- Model Response: {}
+
+**[Evaluation Criteria]**
+1. **Clinical Equivalence**: Do not just look for keyword matching. Look for clinical semantic equivalence.
+2. **Specific Terminology**: In ECG interpretation, specific terminology distinguishes different pathologies.
+3. **Contradiction**: If the response implies a different diagnosis, it is **FALSE**.
+
+**[Output Format]**
+Output exactly two lines. The first line is exactly "TRUE" if aligned or "FALSE" if not; the second is a one-sentence reason.
+"""
 
 
-def _fit_signal_len(ecg: torch.Tensor | None, target_len: int | None) -> torch.Tensor | None:
-    if ecg is None or target_len is None or ecg.shape[-1] == target_len:
-        return ecg
-    if ecg.shape[-1] > target_len:
-        return ecg[..., :target_len]
-    return torch.nn.functional.pad(ecg, (0, target_len - ecg.shape[-1]))
+@register_evaluator("openrouter")
+class OpenRouterEvaluator(Evaluator):
+    @staticmethod
+    def parse_arguments(args) -> argparse.Namespace:
+        parser = Evaluator.add_default_arguments()
+        parser.add_argument("--openrouter-model", default="google/gemini-2.5-flash", help="OpenRouter model id")
+        parser.add_argument("--api-key", default=None, help="OpenRouter API key (else $OPENROUTER_API_KEY)")
+        parser.add_argument("--base-url", default="https://openrouter.ai/api/v1")
+        return parser.parse_args(args)
 
+    def __init__(self, args: argparse.Namespace):
+        super().__init__(args)
+        self.model_name = args.openrouter_model
+        self.name = args.openrouter_model.replace("/", "_")
+        api_key = args.api_key or os.environ.get("OPENROUTER_API_KEY")
+        assert api_key, "Provide --api-key or set OPENROUTER_API_KEY."
+        self.client = OpenAI(api_key=api_key, base_url=args.base_url)
+        self.cache: dict[tuple[str, str], bool] = {}
 
-class BaseModel:
-    ecg_modality_base = "signal"
-
-    @classmethod
-    def build_model(cls, model_variant=None):
-        raise NotImplementedError
-
-    def get_response(self, conversation, **kwargs) -> str:
-        raise NotImplementedError
-
-    @classmethod
-    def require_base64_image(cls):
-        return False
-
-
-class ECGLMModel(BaseModel):
-    ecg_modality_base = "signal"
-
-    def __init__(self, **kwargs):
-        cfg = SimpleNamespace(
-            llm=kwargs["llm"],
-            encoder=kwargs["encoder"],
-            elm=kwargs["elm"],
-            encoder_ckpt=kwargs.get("encoder_ckpt"),
-            elm_ckpt=kwargs["elm_ckpt"],
-            num_encoder_tokens=kwargs.get("num_encoder_tokens", 50),
-            system_prompt=kwargs.get("system_prompt"),
-            segment_len = kwargs.get("segment_len"),
-            update = kwargs.get("update"),
-            perturb = kwargs.get("perturb"),
-            data_representation="signal",
-            attention_type="sdpa",
-            scratch=False,
-            peft=False,
-            dev=False,
-            device=kwargs.get("device"),
-            leads=list(range(12)),
-            norm_eps=1e-6,
-            explicit_thinking=False,
-            train_phase= "rl",
+    @retry(wait=wait_exponential(multiplier=2, min=2, max=60), stop=stop_after_attempt(10))
+    def _judge(self, prompt: str) -> str:
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
         )
-        self.args = cfg
-        self.tokenizer = build_tokenizer(cfg)
-        self.prompt_template = build_chat_template(cfg)
-        self.elm = BuildELM(cfg).build_elm(self.tokenizer)["elm"].eval()
-        self.device = torch.device(cfg.device or ("cuda" if torch.cuda.is_available() else "cpu"))
-        self.elm.to(self.device)
+        return response.choices[0].message.content or ""
 
-    @classmethod
-    def build_model(cls, **kwargs):
-        return cls(**kwargs)
-
-    def get_response(self, conversation, **kwargs) -> str:
-        prompt = self.prompt_template.copy()
-        ecg = None
-        first_user = True
-        for turn in conversation.conversation:
-            if turn["role"] == "system":
-                continue
-            if turn["role"] == "user":
-                msg = f"Question: {turn['question']}\nOptions:\n" + "\n".join(f"- {o}" for o in turn["options"])
-                msg += "\nAnswer with exactly one option text."
-                if first_user:
-                    sig = f"{SIGNAL_TOKEN_PLACEHOLDER}" * self.args.num_encoder_tokens
-                    msg = f"{sig.strip()}\n{msg}"
-                    ecg = _fit_signal_len(turn.get("signal"), self.args.segment_len)
-                    first_user = False
-                prompt.append_message(prompt.roles[0], msg)
-            else:
-                prompt.append_message(prompt.roles[1], turn["text"])
-        prompt.append_message(prompt.roles[1], None)
-        prompt_str = prompt.get_prompt()
-        with torch.no_grad():
-            batch, in_ids = prepare_generation_input(prompt_str, self.tokenizer, ecg, self.args, self.device)
-            out = self.elm.generate(**batch, max_new_tokens=kwargs.get("max_new_tokens", 1024))
-        text = decode_response(in_ids, out, self.tokenizer, self.args)
-        return _pick_option(text, conversation.conversation[-1]["options"])
-
-    @classmethod
-    def require_base64_image(cls):
-        return False
-
-
-def install_models_shim(default_model_kwargs=None):
-    import types
-
-    default_model_kwargs = default_model_kwargs or {}
-    shim = types.ModuleType("models")
-
-    def get_model_name(model):
-        return "ecglm"
-
-    def build_model(model_name: str, **kwargs):
-        if model_name != "ecglm":
-            raise ValueError(f"Only model='ecglm' is supported by this bridge, got: {model_name}")
-        merged_kwargs = {**default_model_kwargs, **kwargs}
-        return ECGLMModel.build_model(**merged_kwargs)
-
-    shim.BaseModel = BaseModel
-    shim.build_model = build_model
-    shim.get_model_name = get_model_name
-    sys.modules["models"] = shim
-
-
-def install_erb_utils_module(erb_dir: str):
-    utils_path = os.path.join(erb_dir, "utils.py")
-    spec = importlib.util.spec_from_file_location("utils", utils_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Could not load ERB utils module from: {utils_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    sys.modules["utils"] = module
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--erb-dir", default=os.path.join(REPO_ROOT, "ecg-reasoning-benchmark"))
-    parser.add_argument("--llm", required=True)
-    parser.add_argument("--encoder", required=True)
-    parser.add_argument("--elm", required=True)
-    parser.add_argument("--elm-ckpt", required=True)
-    parser.add_argument("--encoder-ckpt")
-    parser.add_argument("--system-prompt", default=os.path.join(SRC_DIR, "dataloaders/system_prompts/system_prompt_think.txt"))
-    parser.add_argument("--device")
-    parser.add_argument("--explicit_thinking", action="store_true", default=None, help="explicit thinking")
-    parser.add_argument("--segment_len", type=int, default=2500, help="ECG Segment Length")
-    parser.add_argument("--num-encoder-tokens", type=int, default=50)
-    parser.add_argument("--update", type=str, nargs="+", default=["connector", "llm"],
-                            choices=["encoder", "connector", "llm"], help="Components to update (default: connector llm)")
-    parser.add_argument("--perturb", type=str, default=None, choices=["noise", "zeros", "only_text"],
-                            help="Please choose the perturbation you want to apply into the neural network.")
-    args, passthrough = parser.parse_known_args()
-    if passthrough and passthrough[0] == "--":
-        passthrough = passthrough[1:]
-    default_model_kwargs = {
-        "llm": args.llm,
-        "encoder": args.encoder,
-        "elm": args.elm,
-        "elm_ckpt": args.elm_ckpt,
-        "encoder_ckpt": args.encoder_ckpt,
-        "system_prompt": args.system_prompt,
-        "device": args.device,
-        "num_encoder_tokens": args.num_encoder_tokens,
-        "segment_len": args.segment_len,
-        "update": args.update,
-        "perturb": args.perturb,
-        "explicit_thinking": args.explicit_thinking
-    }
-
-    if args.erb_dir not in sys.path:
-        sys.path.insert(0, args.erb_dir)
-    install_models_shim(default_model_kwargs=default_model_kwargs)
-    install_erb_utils_module(args.erb_dir)
-    from inference import get_parser, main as erb_main  # pylint: disable=import-error
-
-    erb_args = get_parser().parse_args(passthrough)
-    erb_args.model = "ecglm"
-    for k in ["llm", "explicit_thinking", "encoder", "elm", "elm_ckpt", "encoder_ckpt", "system_prompt",
-              "device", "num_encoder_tokens", "segment_len", "update", "perturb"]:
-        setattr(erb_args, k, getattr(args, k))
-    erb_main(erb_args)
+    def validate(self, question, gt, model_response, question_type, **kwargs) -> bool:
+        if question_type.endswith("grounding"):
+            gt = ", ".join(gt)
+        key = (str(gt), model_response)
+        if key not in self.cache:
+            verdict = self._judge(JUDGE_PROMPT.format(question, gt, model_response)).strip()
+            first_line = verdict.split("\n", 1)[0].upper()
+            self.cache[key] = "TRUE" in first_line if ("TRUE" in first_line or "FALSE" in first_line) else "TRUE" in verdict.upper()
+        return self.cache[key]
 
 
 if __name__ == "__main__":
