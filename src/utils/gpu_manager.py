@@ -24,6 +24,22 @@ def batch_to_device(v, device):
         return {k: batch_to_device(x, device) for k, x in v.items()}
     return v
 
+
+def pad_batch_to_len(batch: dict, target_len: int, pad_id: int) -> dict:
+    """Left-pad a collated batch up to target_len (used to force worst-case-shape warmup steps)."""
+    pad = target_len - batch["elm_input_ids"].shape[1]
+    if pad <= 0:
+        return batch
+    F = torch.nn.functional
+    batch = dict(batch)
+    batch["elm_input_ids"] = F.pad(batch["elm_input_ids"], (pad, 0), value=pad_id)
+    batch["elm_attention_mask"] = F.pad(batch["elm_attention_mask"], (pad, 0), value=0)
+    if "elm_labels" in batch:
+        batch["elm_labels"] = F.pad(batch["elm_labels"], (pad, 0), value=-100)
+    if "signal_id_indices" in batch:
+        batch["signal_id_indices"] = torch.where(batch["signal_id_indices"] >= 0, batch["signal_id_indices"] + pad, batch["signal_id_indices"])
+    return batch
+
 def get_world_size() -> int:
     if dist.is_available() and dist.is_initialized():
         return dist.get_world_size()

@@ -2,7 +2,9 @@ import torch
 from tqdm import tqdm
 import wandb
 
-from utils.gpu_manager import is_main, train_dev_break, batch_to_device
+from utils.gpu_manager import is_main, train_dev_break, batch_to_device, pad_batch_to_len
+
+WARMUP_FULL_BATCHES = 20  # first N batches padded to llm_input_len so a worst-case OOM surfaces early
 
 def run_train(
     nn,
@@ -32,8 +34,17 @@ def run_train(
     optimizer.zero_grad()
     accum_loss_for_log = 0.0
 
+    # Fixed-pad the first N batches to llm_input_len so a worst-case-shape OOM surfaces
+    # early (dynamic padding would otherwise hide it until a long batch appears mid-run).
+    warmup = WARMUP_FULL_BATCHES if epoch == 0 else 0
+    pad_id = dataloader.dataset.llm_tokenizer.pad_token_id if warmup else None
+    if warmup and is_main():
+        print(f"[warmup] first {warmup} batches padded to llm_input_len={args.llm_input_len} to surface OOM early")
+
     for step, batch in enumerate(progress):
         batch = {k: batch_to_device(v, device) for k, v in batch.items()}
+        if step < warmup:
+            batch = pad_batch_to_len(batch, args.llm_input_len, pad_id)
 
         out = nn(**batch)
         raw_loss = out.loss
