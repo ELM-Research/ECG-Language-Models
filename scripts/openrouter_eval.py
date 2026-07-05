@@ -1,15 +1,3 @@
-#!/usr/bin/env python3
-"""Step 2/2: LLM-judge scoring of curated ELM responses via the OpenRouter API.
-
-Registers an OpenAI-compatible ``openrouter`` evaluator with the benchmark and
-delegates metric aggregation / CSV export to the benchmark's evaluation driver.
-Point it at the ``--output-dir`` produced by ``scripts/run_ecg_reasoning_bench.py``.
-
-Example:
-    OPENROUTER_API_KEY=... uv run scripts/eval_ecg_reasoning_openrouter.py ./results \
-        --dataset mimic_iv_ecg --model ecglm --evaluator openrouter \
-        --openrouter-model google/gemini-2.5-flash --save-dir ./eval
-"""
 import argparse
 import os
 import sys

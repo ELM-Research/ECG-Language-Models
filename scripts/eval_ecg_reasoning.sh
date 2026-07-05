@@ -21,7 +21,7 @@ CUDA_VISIBLE_DEVICES=4 uv run scripts/run_ecg_reasoning_bench.py ./ecg-reasoning
 
 # Step 2: score the saved responses with an OpenRouter LLM judge
 OPENROUTER_API_KEY="${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY}" \
-uv run scripts/eval_ecg_reasoning_openrouter.py "$RESULTS" \
+uv run scripts/openrouter_eval.py "$RESULTS" \
     --dataset "$DATASET" \
     --model ecglm \
     --evaluator openrouter \

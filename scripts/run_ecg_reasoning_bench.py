@@ -1,20 +1,3 @@
-#!/usr/bin/env python3
-"""Step 1/2: run a trained ELM over ECG-Reasoning-Benchmark and save its responses.
-
-Registers the ELM as the benchmark model ``ecglm`` and hands the multi-turn,
-teacher-forced protocol (default and ``--inference-mode forced-commit``) to the
-benchmark's own driver, which writes one ``<id>.json`` per sample under
-``<output-dir>/ecglm/<dataset>/<target_dx>/``. Score those files afterwards with
-``scripts/eval_ecg_reasoning_openrouter.py``.
-
-Example:
-    uv run scripts/run_ecg_reasoning_bench.py ./ecg-reasoning-benchmark/data \
-        --dataset mimic_iv_ecg --ecg-base-dir ../data/mimic_iv/ \
-        --output-dir ./results --enable-condensed-chat \
-        --llm qwen2.5-3b-instruct --encoder st_mem --elm mlp_llava \
-        --num-encoder-tokens 50 --explicit-thinking \
-        --elm-ckpt src/runs/.../epoch_best.pt
-"""
 import argparse
 import os
 import re
@@ -38,6 +21,11 @@ _ANSWER = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
 _THINK = re.compile(r"<think>(.*?)</think>", re.DOTALL)
 
 
+def _id_set(entry) -> set[int]:
+    """Token ids from a watch_tokens entry (an ``{id: str}`` dict or an id iterable)."""
+    return set(entry.keys() if isinstance(entry, dict) else entry)
+
+
 def extract_answer(text: str) -> str:
     """Return the final answer from a plain or ``<think>``/``<answer>`` RL response."""
     if "</think>" in text and "<think>" not in text:
@@ -59,17 +47,14 @@ class ELM(BaseModel):
         self.elm = BuildELM(args).build_elm(self.tokenizer)["elm"].to(self.device).eval()
         self.placeholder = SIGNAL_TOKEN_PLACEHOLDER * args.num_encoder_tokens + "\n"
         wt = HF_LLMS[args.llm]["watch_tokens"]
-        ids = lambda e: set(e.keys() if isinstance(e, dict) else e)  # noqa: E731
-        self.stop_ids = ids(wt["eos_token"]) | ids(wt.get("final_eos_token", ()))
+        self.stop_ids = _id_set(wt["eos_token"]) | _id_set(wt.get("final_eos_token", ()))
 
     @classmethod
     def build_model(cls, **kwargs) -> "ELM":
         args = argparse.Namespace(**kwargs)
-        args.data_representation = "signal"
         args.leads = list(range(12))
         args.attention_type = "sdpa"
         args.norm_eps = 1e-6
-        args.lora_rank, args.lora_alpha = 16, 32
         args.scratch = args.peft = args.dev = args.distributed = args.gradient_checkpointing = False
         return cls(args)
 
