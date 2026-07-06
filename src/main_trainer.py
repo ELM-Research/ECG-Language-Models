@@ -9,6 +9,7 @@ from dataloaders.build_dataloader import BuildDataLoader
 from elms.build_elm import BuildELM
 
 from runners.trainer import run_train
+from runners.validator import run_validation
 from runners.rl_trainer import run_rl_train
 
 from utils.checkpoint_manager import CheckpointManager
@@ -54,7 +55,7 @@ def main():
         val_dataloader = build_dataloader.val_dataloader
         args.max_steps = math.ceil(len(dataloader) / args.grad_accum_steps) * args.epochs
         build_elm = BuildELM(args)
-        elm_components = build_elm.build_elm(build_dataloader.dataset.llm_tokenizer)
+        elm_components = build_elm.build_elm(dataloader.dataset.llm_tokenizer)
         gpu_setup = GPUSetup(args)
         elm = gpu_setup.setup_gpu(elm_components["elm"],
                                  elm_components["find_unused_parameters"])
@@ -67,13 +68,10 @@ def main():
         start_epoch = 0
         if args.resume_ckpt and checkpoint_manager:
             start_epoch = checkpoint_manager.resume_checkpoint(args.resume_ckpt, elm, optimizer)
-        is_rl = getattr(args, "train_phase", "sft") == "rl"
+        runner = run_rl_train if getattr(args, "train_phase", "sft") == "rl" else run_train
         for epoch in range(start_epoch, args.epochs):
-            if is_rl:
-                train_result = run_rl_train(elm, optimizer, dataloader, epoch, args, checkpoint_manager)
-            else:
-                train_result = run_train(elm, dataloader, epoch, args, optimizer, checkpoint_manager)
-            val_result = run_train(elm, val_dataloader, epoch, args) if val_dataloader is not None else None
+            train_result = runner(elm, optimizer, dataloader, epoch, args, checkpoint_manager)
+            val_result = run_validation(elm, val_dataloader, epoch, args) if val_dataloader is not None else None
             monitor_loss = val_result["average_loss"] if val_result is not None else train_result["average_loss"]
             should_stop = False
             if checkpoint_manager and is_main():

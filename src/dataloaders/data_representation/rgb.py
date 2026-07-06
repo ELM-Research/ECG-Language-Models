@@ -17,7 +17,7 @@ class RGB(Base):
         self.llm_tokenizer = llm_tokenizer_components["llm_tokenizer"] if llm_tokenizer_components else None
         self.encoder_tokenizer = encoder_tokenizer_components["encoder_tokenizer"]
         self.viz = VizManager()
-        if self.args.augment_rgb:
+        if self.is_train and self.args.augment_rgb:
             self.aug = T.Compose([T.RandomApply([T.ColorJitter(brightness=0.2)], p=0.5),
                                 T.RandomApply([T.RandomRotation(5)], p=0.5),
                                 T.RandomApply([T.GaussianBlur(kernel_size=5, sigma=(0.0, 1.5))], p=0.5),
@@ -34,7 +34,7 @@ class RGB(Base):
         else:
             ecg_np_file = self.fm.open_npy(instance["ecg_path"])
             ecg_signal = ecg_np_file["ecg"][self.args.leads]
-            if self.args.augment_ecg:
+            if self.is_train and self.args.augment_ecg:
                 ecg_signal = self.augment_ecg(ecg_signal)
 
         if self.args.dev and is_main():
@@ -102,7 +102,7 @@ class RGB(Base):
     ### SIGNAL TO IMAGE FUNCTIONS ###
     def signal_to_image(self, ecg_signal: np.array):
         image = self.viz.get_plot_as_image(ecg_signal, 250, lead_names = self.lead_names)  # 250 Hz
-        if self.args.augment_rgb and random.random() < 0.6:
+        if self.is_train and self.args.augment_rgb and random.random() < 0.6:
             return self.augment_image(image)
         return Image.fromarray(image)
 

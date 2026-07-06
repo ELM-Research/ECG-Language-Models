@@ -43,7 +43,7 @@ def main():
             build_dataloader = BuildDataLoader(args)
             dataloader = build_dataloader.build_dataloader()
             build_elm = BuildELM(args)
-            elm_components = build_elm.build_elm(build_dataloader.dataset.llm_tokenizer)
+            elm_components = build_elm.build_elm(dataloader.dataset.llm_tokenizer)
             gpu_setup = GPUSetup(args)
             elm = gpu_setup.setup_gpu(elm_components["elm"], elm_components["find_unused_parameters"])
             if args.dev:
