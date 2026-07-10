@@ -16,7 +16,7 @@ If there are any questions or bugs, please do not hesitate to reach out to wjhan
 > **Status:** Beta.
 
 ## Setup <a name="setup"></a>
-We use torch 2.9 with cuda 12.8 and primarily use H100 GPUs.
+We use torch 2.9 with cuda 12.8 and primarily use H100 NVL NVIDIA GPUs.
 
 
 ```bash
