@@ -12,9 +12,11 @@ class LLaVA(nn.Module):
         self.update = update
         self.only_text = only_text
         for name, module in [("encoder", self.encoder), ("connector", self.projection), ("llm", self.llm)]:
-            requires_grad = name in self.update
-            for p in module.parameters():
-                p.requires_grad = requires_grad
+            if name == "llm":
+                if name not in self.update:
+                    module.requires_grad_(False)
+            else:
+                module.requires_grad_(name in self.update)
 
     def train(self, mode: bool = True):
         super().train(mode)
