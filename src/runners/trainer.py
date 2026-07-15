@@ -12,6 +12,7 @@ def run_train(
     args,
     checkpoint_manager=None,
 ):
+    nn.train()
     if getattr(args, "distributed", False) and hasattr(getattr(dataloader, "sampler", None), "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 

@@ -73,7 +73,7 @@ class BuildEncoder:
         VISION_ENCODERS[self.args.encoder]["model_hidden_size"] = hidden
         VISION_ENCODERS[self.args.encoder]["projection_dim"] = hidden
         model = SiglipEcg(hf_encoder, segment_len=self.args.segment_len,
-                          patch_size=self.calculate_patch_size(),
+                          patch_size=25,
                           num_encoder_tokens=self.args.num_encoder_tokens,
                           num_leads=len(self.args.leads))
         return {"encoder": model}

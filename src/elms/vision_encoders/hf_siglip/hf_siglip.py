@@ -1,4 +1,3 @@
-import torch
 from torch import nn
 
 
@@ -15,7 +14,6 @@ class HFSiglip(nn.Module):
     def forward(self,):
         raise NotImplementedError
 
-    @torch.no_grad()
     def get_encoder_embeddings(self, encoder_input_ids, encoder_attention_mask,
                                encoder_pixels, spatial_shapes):
         out = self.vision_encoder(input_ids = encoder_input_ids,

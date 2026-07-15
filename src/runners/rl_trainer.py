@@ -9,6 +9,7 @@ from rl.rollout import rollout_group, current_log_prob
 
 
 def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None):
+    nn.train()
     if getattr(args, "distributed", False) and hasattr(getattr(dataloader, "sampler", None), "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
 
