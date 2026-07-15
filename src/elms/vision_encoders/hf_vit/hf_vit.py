@@ -15,7 +15,6 @@ class HFVit(nn.Module):
     def forward(self,):
         raise NotImplementedError
 
-    @torch.no_grad()
     def get_encoder_embeddings(self, encoder_pixels, encoder_mask,):
         out = self.vision_encoder(pixel_values = encoder_pixels,
                                   bool_masked_pos = encoder_mask,
