@@ -114,8 +114,7 @@ def decode_response(input_ids, generated_ids, llm_tokenizer, args):
     stop_ids = eos | final_eos
     cut = next((i for i, t in enumerate(cont) if t in stop_ids), len(cont))
     cont = cont[:cut]
-
-    return llm_tokenizer.decode(cont, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
+    return llm_tokenizer.decode(cont, skip_special_tokens=False, clean_up_tokenization_spaces=True).strip()
 
 
 def print_banner():
