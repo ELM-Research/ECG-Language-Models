@@ -9,6 +9,7 @@ from dataloaders.build_dataloader import BuildDataLoader
 from elms.build_elm import BuildELM
 
 from runners.trainer import run_train
+from runners.validator import run_validation
 from runners.rl_trainer import run_rl_train
 
 from utils.checkpoint_manager import CheckpointManager
@@ -51,6 +52,7 @@ def main():
         set_seed(args.seed)
         build_dataloader = BuildDataLoader(args)
         dataloader = build_dataloader.build_dataloader()
+        val_dataloader = build_dataloader.val_dataloader
         args.max_steps = math.ceil(len(dataloader) / args.grad_accum_steps) * args.epochs
         build_elm = BuildELM(args)
         elm_components = build_elm.build_elm(dataloader.dataset.llm_tokenizer)
@@ -69,11 +71,13 @@ def main():
         runner = run_rl_train if getattr(args, "train_phase", "sft") == "rl" else run_train
         for epoch in range(start_epoch, args.epochs):
             train_result = runner(elm, optimizer, dataloader, epoch, args, checkpoint_manager)
+            val_result = run_validation(elm, val_dataloader, epoch, args) if val_dataloader is not None else None
+            monitor_loss = val_result["average_loss"] if val_result is not None else train_result["average_loss"]
             should_stop = False
             if checkpoint_manager and is_main():
-                if checkpoint_manager.save_epoch(train_result["average_loss"]):
+                if checkpoint_manager.save_epoch(monitor_loss):
                     checkpoint_manager.save_checkpoint(elm, optimizer, epoch, -1, is_best=True, prefix="epoch_")
-                if args.early_stopping and checkpoint_manager.stop_early():
+                if args.early_stopping and val_result is not None and checkpoint_manager.stop_early():
                     print(f"Early stopping at epoch {epoch}")
                     should_stop = True
             should_stop = broadcast_value(should_stop, src=0)

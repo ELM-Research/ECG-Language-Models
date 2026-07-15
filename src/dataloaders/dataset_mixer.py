@@ -1,5 +1,6 @@
 from datasets import load_dataset
 import json
+import random
 from transformers import AutoTokenizer, AutoProcessor
 
 from utils.dir_file_manager import DirFileManager
@@ -27,9 +28,32 @@ class DatasetMixer:
             print(f"Using {self.args.data_representation} representation")
         encoder_tokenizer_components = self.build_encoder_tokenizer()
         llm_tokenizer_components = self.build_llm_tokenizer()
-        torch_dataset = self.build_data_representation(data, llm_tokenizer_components,
+        train_data, val_data = self.split_train_val(data)
+        train_dataset = self.build_data_representation(train_data, llm_tokenizer_components,
                                                        encoder_tokenizer_components)
-        return torch_dataset
+        val_dataset = None
+        if val_data is not None:
+            val_dataset = self.build_data_representation(val_data, llm_tokenizer_components,
+                                                         encoder_tokenizer_components)
+            val_dataset.is_train = False
+        return train_dataset, val_dataset
+
+    def split_train_val(self, data):
+        val_split = getattr(self.args, "val_split", None)
+        if not val_split or "train" not in self.args.mode or getattr(self.args, "train_phase", "sft") == "rl":
+            return data, None
+        n_total = len(data)
+        n_val = int(n_total * val_split) if val_split < 1 else int(val_split)
+        n_val = max(0, min(n_val, n_total))
+        if n_val == 0:
+            return data, None
+        indices = list(range(n_total))
+        random.Random(self.args.seed).shuffle(indices)
+        val_data = [data[i] for i in indices[:n_val]]
+        train_data = [data[i] for i in indices[n_val:]]
+        if is_main():
+            print(f"Validation split: {len(train_data)} train / {len(val_data)} val (val_split={val_split})")
+        return train_data, val_data
 
     def build_data_representation(self, data, llm_tokenizer_components,
                                   encoder_tokenizer_components):

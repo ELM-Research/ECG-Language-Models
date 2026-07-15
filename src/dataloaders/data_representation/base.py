@@ -23,6 +23,7 @@ class Base(Dataset):
     def __init__(self, data, args):
         self.data = data
         self.args = args
+        self.is_train = True
         self.fm = DirFileManager()
         if self.args.llm:
             self.chat_template = self.make_chat_template()

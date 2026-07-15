@@ -66,7 +66,7 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--epochs", type=int, default=1, help="Number of epochs")
         parser.add_argument("--weight_decay", type=float, default=1e-2, help="Weight decay")
         parser.add_argument("--patience", type=int, default=5, help="Patience for early stopping")
-        parser.add_argument("--patience_delta", type=float, default=0.1, help="Delta for early stopping")
+        parser.add_argument("--patience_delta", type=float, default=0.0001, help="Delta for early stopping")
         parser.add_argument("--early_stopping", action="store_true", default=False, help="Enable early stopping")
         parser.add_argument("--beta1", type=float, default=0.9, help="Beta1 for optimizer")
         parser.add_argument("--beta2", type=float, default=0.99, help="Beta2 for optimizer")
@@ -82,6 +82,8 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--grad_clip", type=float, default=0.0, help="Max gradient norm for clipping (0 to disable)")
         parser.add_argument("--scale_wd", type=str, default="none", choices=["none", "inv_sqrt", "inv_linear"])
         parser.add_argument("--resume_ckpt", type=str, default=None, help="Full training resume: restores model, optimizer, and LR schedule state")
+        parser.add_argument("--val_split", type=float, default=None,
+                            help="Hold out examples for validation (<1 = fraction of train, >=1 = absolute count). Default: none.")
 
         # RL (train_phase=rl) — agnostic policy-gradient pipeline
         parser.add_argument("--rl_algo", type=str, default="sapo", choices=["sapo"], help="RL policy-loss algorithm")

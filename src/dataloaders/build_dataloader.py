@@ -17,21 +17,23 @@ class BuildDataLoader:
     ):
         self.args = args
         self.dataset_mixer = DatasetMixer(self.args)
+        self.val_dataloader = None
 
     def build_dataloader(
         self,
     ):
-        torch_dataset = self.dataset_mixer.build_torch_dataset()
-        torch_data_loader = self.build_torch_dataloader(torch_dataset)
-        return torch_data_loader
+        train_dataset, val_dataset = self.dataset_mixer.build_torch_dataset()
+        if val_dataset is not None:
+            self.val_dataloader = self.build_torch_dataloader(val_dataset, is_val=True)
+        return self.build_torch_dataloader(train_dataset)
 
-    def build_torch_dataloader(self, torch_dataset):
-        sampler = self.get_torch_dataloader_sampler(torch_dataset)
+    def build_torch_dataloader(self, torch_dataset, is_val=False):
+        sampler = self.get_torch_dataloader_sampler(torch_dataset, shuffle=not is_val)
         if "train" in self.args.mode:
             torch_data_loader = DataLoader(
                 torch_dataset,
                 batch_size=self.args.batch_size,
-                shuffle=(sampler is None),
+                shuffle=(sampler is None and not is_val),
                 num_workers=self.args.num_workers,
                 sampler=sampler,
                 pin_memory=torch.cuda.is_available(),
@@ -52,10 +54,11 @@ class BuildDataLoader:
     def get_torch_dataloader_sampler(
         self,
         torch_dataset,
+        shuffle=True,
     ):
         if self.args.distributed:
             sampler = DistributedSampler(torch_dataset, num_replicas=get_world_size(),
-                                         rank=get_rank(), seed=self.args.seed, shuffle=True)
+                                         rank=get_rank(), seed=self.args.seed, shuffle=shuffle)
         else:
             sampler = None
         return sampler

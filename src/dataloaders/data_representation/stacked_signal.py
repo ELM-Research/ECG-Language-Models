@@ -21,7 +21,7 @@ class StackedSignal(Base):
         else:
             ecg_np_file = self.fm.open_npy(instance["ecg_path"])
             ecg_signal = ecg_np_file["ecg"][self.args.leads]
-            if self.args.augment_ecg:
+            if self.is_train and self.args.augment_ecg:
                 ecg_signal = self.augment_ecg(ecg_signal)
         ecg_stacked_signal = self.signal_to_stacked_signal(ecg_signal)
 
