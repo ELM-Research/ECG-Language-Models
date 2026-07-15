@@ -35,7 +35,8 @@ def build_tokenizer(args):
     tokens_to_add = HF_LLMS[args.llm]["tokens_to_add"]
     tokens_to_add["additional_special_tokens"].append(SIGNAL_TOKEN_PLACEHOLDER)
     if args.train_phase in ["sft", "rl"]:
-            tokens_to_add["additional_special_tokens"].extend(RL_TOKENS)
+        vocab = llm_tokenizer.get_vocab()
+        tokens_to_add["additional_special_tokens"].extend(t for t in RL_TOKENS if t not in vocab)
     llm_tokenizer.add_special_tokens(tokens_to_add)
     return llm_tokenizer
 

@@ -104,7 +104,8 @@ class DatasetMixer:
             for k, v in HF_LLMS[self.args.llm]["tokens_to_add"].items()}
         tokens_to_add["additional_special_tokens"].append(SIGNAL_TOKEN_PLACEHOLDER)
         if self.args.train_phase in ["sft", "rl"]:
-            tokens_to_add["additional_special_tokens"].extend(RL_TOKENS)
+            vocab = llm_tokenizer.get_vocab()
+            tokens_to_add["additional_special_tokens"].extend(t for t in RL_TOKENS if t not in vocab)
         llm_tokenizer.add_special_tokens(tokens_to_add)
 
         if self.args.data_representation == "symbolic":
