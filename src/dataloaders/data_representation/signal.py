@@ -90,5 +90,4 @@ class Signal(Base):
     def transform_ecg_signal(self, ecg_signal):
         if self.args.elm == "base_elf":
             return ecg_signal.flatten()
-        else:
-            return ecg_signal
+        return ecg_signal

@@ -104,5 +104,4 @@ class Symbolic(Base):
 
     def convert_ecg_tokens(self, ecg_tokens):
         ecg_tokens = self.llm_tokenizer.convert_ids_to_tokens(ecg_tokens)
-        ecg_tokens = [int(tok.replace(ECG_TOKEN_PREFIX, "")) for tok in ecg_tokens]
-        return ecg_tokens
+        return [int(tok.replace(ECG_TOKEN_PREFIX, "")) for tok in ecg_tokens]
