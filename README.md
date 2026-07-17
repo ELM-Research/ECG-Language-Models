@@ -95,8 +95,11 @@ We utilize the following pretrained LLMs from HuggingFace.
 | [Llama 3](https://arxiv.org/abs/2407.21783) | `llama-3.2-{1, 3}b-instruct` |
 | [Gemma 2](https://arxiv.org/abs/2408.00118) | `gemma-2-2b-it` |
 | [Qwen 2.5](https://arxiv.org/abs/2412.15115) | `qwen2.5-{0.5, 1.5, 3, 7}b-instruct` |
+| [Qwen 3 Base](https://arxiv.org/abs/2505.09388) | `qwen3-{0.6, 1.7, 4, 8}b-base` |
 | [Qwen 3](https://arxiv.org/abs/2505.09388) | `qwen3-{0.6, 1.7, 4, 8}b` |
 | [Qwen 3.5](https://qwen.ai/blog?id=qwen3.5) | `qwen3.5-{0.8, 2, 4, 9}b` |
+| [Qwen 3.5 Base](https://qwen.ai/blog?id=qwen3.5) | `qwen3.5-{0.8, 2, 4, 9}b-base` |
+
 
 ## Encoders <a name="encoders"></a>
 

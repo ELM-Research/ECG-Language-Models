@@ -35,7 +35,8 @@ def build_tokenizer(args):
     tokens_to_add = HF_LLMS[args.llm]["tokens_to_add"]
     tokens_to_add["additional_special_tokens"].append(SIGNAL_TOKEN_PLACEHOLDER)
     if args.train_phase in ["sft", "rl"]:
-            tokens_to_add["additional_special_tokens"].extend(RL_TOKENS)
+        vocab = llm_tokenizer.get_vocab()
+        tokens_to_add["additional_special_tokens"].extend(t for t in RL_TOKENS if t not in vocab)
     llm_tokenizer.add_special_tokens(tokens_to_add)
     return llm_tokenizer
 
@@ -113,8 +114,7 @@ def decode_response(input_ids, generated_ids, llm_tokenizer, args):
     stop_ids = eos | final_eos
     cut = next((i for i, t in enumerate(cont) if t in stop_ids), len(cont))
     cont = cont[:cut]
-
-    return llm_tokenizer.decode(cont, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
+    return llm_tokenizer.decode(cont, skip_special_tokens=False, clean_up_tokenization_spaces=True).strip()
 
 
 def print_banner():

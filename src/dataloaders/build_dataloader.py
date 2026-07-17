@@ -22,13 +22,12 @@ class BuildDataLoader:
         self,
     ):
         torch_dataset = self.dataset_mixer.build_torch_dataset()
-        torch_data_loader = self.build_torch_dataloader(torch_dataset)
-        return torch_data_loader
+        return self.build_torch_dataloader(torch_dataset)
 
     def build_torch_dataloader(self, torch_dataset):
         sampler = self.get_torch_dataloader_sampler(torch_dataset)
         if "train" in self.args.mode:
-            torch_data_loader = DataLoader(
+            return DataLoader(
                 torch_dataset,
                 batch_size=self.args.batch_size,
                 shuffle=(sampler is None),
@@ -39,26 +38,25 @@ class BuildDataLoader:
                 persistent_workers=(self.args.num_workers > 0),
                 prefetch_factor=4 if self.args.num_workers > 0 else None,
             )
-        elif "eval" in self.args.mode:
-            torch_data_loader = DataLoader(
+        if "eval" in self.args.mode:
+            return DataLoader(
                 torch_dataset,
                 batch_size=1,  # batched inference/eval not implemented
                 shuffle=False,
                 pin_memory=torch.cuda.is_available(),
                 collate_fn=self.collate_fn,
             )
-        return torch_data_loader
+        return ValueError(f"Unsupported mode: {self.args.mode}")
 
     def get_torch_dataloader_sampler(
         self,
         torch_dataset,
     ):
         if self.args.distributed:
-            sampler = DistributedSampler(torch_dataset, num_replicas=get_world_size(),
+            return DistributedSampler(torch_dataset, num_replicas=get_world_size(),
                                          rank=get_rank(), seed=self.args.seed, shuffle=True)
         else:
-            sampler = None
-        return sampler
+            return None
 
     def collate_fn(self, batch):
         batch = [item for item in batch if item is not None]

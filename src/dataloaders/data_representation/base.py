@@ -91,17 +91,19 @@ class Base(Dataset):
         return ranges
 
     def get_ground_truth_responses(self, input_ids: List[int], ranges: List[Tuple[int, int]]) -> List[str]:
-        return [self.llm_tokenizer.decode(input_ids[s:e], skip_special_tokens=True, clean_up_tokenization_spaces=True).strip() for s, e in ranges]
+        return [self.decode_response(input_ids[s:e]) for s, e in ranges]
+
+    def decode_response(self, ids: list[int]) -> str:
+        wt = HF_LLMS[self.args.llm]["watch_tokens"]
+        drop = self.id_set(wt["eos_token"]) | self.id_set(wt.get("final_eos_token", ())) | {self.llm_tokenizer.pad_token_id}
+        return self.llm_tokenizer.decode([t for t in ids if t not in drop], skip_special_tokens=False, clean_up_tokenization_spaces=True).strip()
 
     def get_generated_response_for_turn(self, prompt_input_ids: list[int], generated_ids: list[int]) -> str:
         wt = HF_LLMS[self.args.llm]["watch_tokens"]
-        eos = self.id_set(wt["eos_token"])
-        final_eos = self.id_set(wt.get("final_eos_token", ()))
+        stop_ids = self.id_set(wt["eos_token"]) | self.id_set(wt.get("final_eos_token", ()))
         cont = self.slice_continuation(prompt_input_ids, generated_ids)
-        stop_ids = eos | final_eos
         cut = next((i for i, t in enumerate(cont) if t in stop_ids), len(cont))
-        cont = cont[:cut]
-        return self.llm_tokenizer.decode(cont, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
+        return self.decode_response(cont[:cut])
 
     @property
     def think_prefix_ids(self) -> list[int]:
