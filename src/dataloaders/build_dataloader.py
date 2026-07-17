@@ -28,7 +28,7 @@ class BuildDataLoader:
     def build_torch_dataloader(self, torch_dataset):
         sampler = self.get_torch_dataloader_sampler(torch_dataset)
         if "train" in self.args.mode:
-            torch_data_loader = DataLoader(
+            return DataLoader(
                 torch_dataset,
                 batch_size=self.args.batch_size,
                 shuffle=(sampler is None),
@@ -39,15 +39,15 @@ class BuildDataLoader:
                 persistent_workers=(self.args.num_workers > 0),
                 prefetch_factor=4 if self.args.num_workers > 0 else None,
             )
-        elif "eval" in self.args.mode:
-            torch_data_loader = DataLoader(
+        if "eval" in self.args.mode:
+            return DataLoader(
                 torch_dataset,
                 batch_size=1,  # batched inference/eval not implemented
                 shuffle=False,
                 pin_memory=torch.cuda.is_available(),
                 collate_fn=self.collate_fn,
             )
-        return torch_data_loader
+        return ValueError(f"Unsupported mode: {self.args.mode}")
 
     def get_torch_dataloader_sampler(
         self,
