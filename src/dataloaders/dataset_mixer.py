@@ -27,9 +27,8 @@ class DatasetMixer:
             print(f"Using {self.args.data_representation} representation")
         encoder_tokenizer_components = self.build_encoder_tokenizer()
         llm_tokenizer_components = self.build_llm_tokenizer()
-        torch_dataset = self.build_data_representation(data, llm_tokenizer_components,
+        return self.build_data_representation(data, llm_tokenizer_components,
                                                        encoder_tokenizer_components)
-        return torch_dataset
 
     def build_data_representation(self, data, llm_tokenizer_components,
                                   encoder_tokenizer_components):
