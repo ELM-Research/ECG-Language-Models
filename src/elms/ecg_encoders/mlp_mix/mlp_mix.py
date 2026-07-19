@@ -1,4 +1,4 @@
-### Taken from https://github.com/google-research/vision_transformer
+### Taken from https://github.com/jaketae/mlp-mixer
 ### Modified by willxxy
 
 from torch import nn
