@@ -160,6 +160,19 @@ class Base(Dataset):
         padding_len = self.args.llm_input_len - len(tokens)
         return [self.llm_tokenizer.pad_token_id] * padding_len + tokens  # left side padding
 
+    def pad_to_batch(self, item: dict, target_len: int) -> dict:
+        pad_len = target_len - item["elm_input_ids"].shape[0]
+        if pad_len == 0:
+            return item
+        pad_values = {"elm_input_ids": self.llm_tokenizer.pad_token_id, "elm_labels": -100, "elm_attention_mask": 0}
+        for key, value in pad_values.items():
+            if key in item:
+                item[key] = torch.nn.functional.pad(item[key], (pad_len, 0), value=value)  # left side padding
+        if "signal_id_indices" in item:
+            idx = item["signal_id_indices"]
+            item["signal_id_indices"] = torch.where(idx >= 0, idx + pad_len, idx)  # left-pad shifts every real position by pad_len
+        return item
+
     def make_prompt(
         self,
         text: str,

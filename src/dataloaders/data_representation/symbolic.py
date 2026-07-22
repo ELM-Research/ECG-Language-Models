@@ -55,8 +55,8 @@ class Symbolic(Base):
             self.check_labels(labels)
             self.check_attention_mask(truncated_padded_input, attention_mask)
 
-        assert len(truncated_padded_input) == len(attention_mask) == len(labels) == self.args.llm_input_len, (
-            f"Length mismatch: {len(truncated_padded_input)} != {len(attention_mask)} != {len(labels)} != {self.args.llm_input_len}"
+        assert len(truncated_padded_input) == len(attention_mask) == len(labels), (
+            f"Length mismatch: {len(truncated_padded_input)} != {len(attention_mask)} != {len(labels)}"
         )
         # print("truncated_padded_ecg_tokens", truncated_padded_ecg_tokens)
         # print("signal_id_indices", signal_id_indices)
@@ -86,12 +86,8 @@ class Symbolic(Base):
             min_ecg_token_len = int(self.args.min_ecg_tokens_len)
             before_len, after_len, ecg_token_len = len(before), len(after), len(ecg_tokens)
 
-            if before_len + after_len + ecg_token_len == self.args.llm_input_len:
-                # return before + ecg_tokens + after, self.convert_ecg_tokens(ecg_tokens)
+            if before_len + after_len + ecg_token_len <= self.args.llm_input_len:
                 return before + ecg_tokens + after
-            elif before_len + after_len + ecg_token_len < self.args.llm_input_len:
-                # return self.pad_input(before + ecg_tokens + after), self.convert_ecg_tokens(ecg_tokens)
-                return self.pad_input(before + ecg_tokens + after)
 
             if before_len + min_ecg_token_len > self.args.llm_input_len:
                 raise ValueError("before + min_ecg exceeds llm_input_len; lower min_ecg_tokens_len.")

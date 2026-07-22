@@ -82,7 +82,7 @@ class GPUSetup:
         if is_main():
             print(f"find_unused_parameters: {find_unused_parameters}")
         if self.args.torch_compile:
-            model = torch.compile(model)
+            model = torch.compile(model, dynamic=True)
         return model
 
     def get_device(self) -> torch.device:
