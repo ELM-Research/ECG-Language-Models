@@ -2,7 +2,6 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import time
 from tqdm import tqdm
-from torch.nn.attention import SDPBackend, sdpa_kernel
 print("flash attention SDP enabled.", torch.backends.cuda.flash_sdp_enabled())
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-3B-Instruct")
