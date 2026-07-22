@@ -46,3 +46,7 @@ select = ["ALL"]
 
 [tool.uv]
 override-dependencies = ["triton==3.3.1"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
