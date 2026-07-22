@@ -1,7 +1,7 @@
 import re
 
-_FMT_X = re.compile(r"^\s*[\s\S]*?</think>\s*<answer>[\s\S]*?</answer>\s*$")
-_FMT_NX = re.compile(r"^\s*<think>[\s\S]*?</think>\s*<answer>[\s\S]*?</answer>\s*$")
+_FMT_X = re.compile(r"^\s*[\s\S]*?</think>[\s\S]*?<answer>[\s\S]*?</answer>\s*$")
+_FMT_NX = re.compile(r"^\s*<think>[\s\S]*?</think>[\s\S]*?<answer>[\s\S]*?</answer>\s*$")
 _ANSWER = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
 _TAGS_X = ("</think>", "<answer>", "</answer>")
 _TAGS_NX = ("<think>",) + _TAGS_X
