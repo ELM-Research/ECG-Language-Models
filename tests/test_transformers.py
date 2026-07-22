@@ -10,9 +10,8 @@ messages = [
     {"role": "user", "content": "Who are you?"},
 ]
 
-# attn_impls = ["kernels-community/flash-attn2", "kernels-community/flash-attn3",
-#               "kernels-community/vllm-flash-attn3", "sdpa", None]
-attn_impls = ["sdpa"]
+attn_impls = ["kernels-community/flash-attn2", "kernels-community/flash-attn3",
+              "kernels-community/vllm-flash-attn3", "sdpa", None]
 warmup_runs = 10
 timed_runs = 100
 
