@@ -55,8 +55,8 @@ class StackedSignal(Base):
         signal_id_indices = self.find_signal_token_indices(truncated_padded_input)
         attention_mask = self.create_attention_mask(truncated_padded_input)
         labels = self.create_labels(truncated_padded_input)
-        assert len(truncated_padded_input) == len(attention_mask) == len(labels) == self.args.llm_input_len, (
-            f"Length mismatch: {len(truncated_padded_input)} != {len(attention_mask)} != {len(labels)} != {self.args.llm_input_len}"
+        assert len(truncated_padded_input) == len(attention_mask) == len(labels), (
+            f"Length mismatch: {len(truncated_padded_input)} != {len(attention_mask)} != {len(labels)}"
         )
         elm = {
             "elm_input_ids": torch.tensor(truncated_padded_input, dtype=torch.int64),
@@ -90,12 +90,6 @@ class StackedSignal(Base):
 
     def trunc_pad_input(self, prompt: str):
         prompt_tokens = self.llm_tokenizer.encode(prompt, add_special_tokens=False)
-        if "train" in self.args.mode:
-            prompt_len = len(prompt_tokens)
-            if prompt_len == self.args.llm_input_len:
-                return prompt_tokens
-            elif prompt_len < self.args.llm_input_len:
-                return self.pad_input(prompt_tokens)
+        if "train" in self.args.mode and len(prompt_tokens) > self.args.llm_input_len:
             return self.truncate_input_preserving_signal_tokens(prompt_tokens)
-        else:
-            return prompt_tokens
+        return prompt_tokens
