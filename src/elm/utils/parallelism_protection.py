@@ -21,9 +21,10 @@ def broadcast_value(value, src: int = 0):
     distributed.broadcast_object_list(values, src=src)
     return values[0]
 
-def init_dist():
+def init_dist(config):
+    config.distributed = get_local_rank() > 1
     if distributed.is_initialized():
-        return
+        return config
     device = torch.device("cuda", get_local_rank())
     torch.cuda.set_device(device)
     distributed.init_process_group(backend=distributed.get_default_backend_for_device(device),
