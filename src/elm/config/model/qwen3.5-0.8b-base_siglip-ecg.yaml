@@ -1,0 +1,3 @@
+model:
+  llm: qwen3.5-0.8b-base
+  encoder: siglip-ecg

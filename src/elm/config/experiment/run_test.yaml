@@ -1,0 +1,3 @@
+defaults:
+  - ../model/qwen3.5-0.8b-base_siglip-ecg.yaml
+  - ../training/sft.yaml
