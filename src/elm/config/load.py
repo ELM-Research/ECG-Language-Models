@@ -26,11 +26,10 @@ def load_config(path: str | Path, stack: tuple[Path, ...] = ()) -> dict[str, Any
     with path.open() as file:
         raw = yaml.safe_load(file) or {}
 
-    defaults = raw.pop("defaults", [])
     config: dict[str, Any] = {}
 
-    for relative_path in defaults:
-        included = load_config(path.parent / relative_path, (*stack, path))
+    for default in raw.pop("defaults", []):
+        included = load_config(path.parent / default, (*stack, path))
         config = deep_merge(config, included)
 
     return deep_merge(config, raw)
