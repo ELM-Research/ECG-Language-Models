@@ -16,15 +16,8 @@ if __name__ == "__main__":
     try:
         if not config["dev"] and is_main():
             run_folder = setup_experiment_folders(
-                f'{RUNS_DIR}/{config["model"]["llm"]}_{config["model"]["encoder"]}'
-            )
-        print("hi")
-        # if not args.dev:
-        #     data_name = "_".join(args.data)
-        #     run_folder = setup_experiment_folders(
-        #         f"{RUNS_DIR}/{args.elm}_{args.llm}_{args.encoder}/{data_name}", # add args.elm as a name
-        #         args,
-        #     )
+                f'{RUNS_DIR}/{config["model"]["llm"]}_{config["model"]["encoder"]}',
+                config,)
         # if is_main() and not args.dev:
         #     print(f"Run folder: {run_folder}")
         #     if args.wandb:

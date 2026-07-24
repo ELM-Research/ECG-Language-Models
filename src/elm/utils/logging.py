@@ -3,15 +3,11 @@ import traceback
 import time
 import wandb
 from pathlib import Path
-from typing import Optional, Union
 import yaml
-import argparse
 
-from elm.utils.parallelism import is_main, barrier, broadcast_value
-
-def setup_wandb(args, project = "ecg-bench-new", name = None):
+def setup_wandb(config, project = "ecg-bench-new", name = None):
     print("Initializing Wandb")
-    wandb.init(project=project, config=args, name = name,)
+    wandb.init(project=project, config=config, name = name,)
 
 def cleanup_wandb():
     error = sys.exc_info()[1]
@@ -32,38 +28,17 @@ def timeit(fn, desc="", dev=False):
 
 def setup_experiment_folder(
     base_run_dir: str | Path,
-    args: Namespace,
+    config: dict,
 ) -> Path:
     base_run_dir = Path(base_run_dir)
-
-    if is_main():
-        base_run_dir.mkdir(parents=True, exist_ok=True)
-        run_id = next_run_id(base_run_dir)
-        run_dir = base_run_dir / run_id
-        run_dir.mkdir()
-        save_config(run_dir, args)
-    else:
-        run_id = None
-
-    run_id = broadcast_value(run_id, src=0)
-    return base_run_dir / run_id
-
-
-def next_run_id(base_run_dir: Path) -> str:
+    base_run_dir.mkdir(parents=True, exist_ok=True)
     run_ids = (
-        int(path.name)
-        for path in base_run_dir.iterdir()
-        if path.is_dir() and path.name.isdigit()
-    )
-    return str(max(run_ids, default=-1) + 1)
-
-
-def save_config(run_dir: Path, args: Namespace) -> None:
-    config = {
-        key: value
-        for key, value in vars(args).items()
-        if not key.startswith("_")
-    }
-
+            int(path.name)
+            for path in base_run_dir.iterdir()
+            if path.is_dir() and path.name.isdigit()
+        )
+    run_dir = base_run_dir / str(max(run_ids, default=-1) + 1)
+    run_dir.mkdir()
     with (run_dir / "config.yaml").open("w") as file:
         yaml.safe_dump(config, file, sort_keys=False)
+    return run_dir
