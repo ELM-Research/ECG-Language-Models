@@ -3,5 +3,8 @@ defaults:
   - ../training/pretrain.yaml
   - ../gpu/single.yaml
 
+seed: 0
+dev: true
+
 training:
   optimizer: muon

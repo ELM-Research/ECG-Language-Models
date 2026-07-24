@@ -3,5 +3,8 @@ defaults:
   - ../training/sft.yaml
   - ../gpu/distributed.yaml
 
+seed: 0
+dev: true
+
 training:
   optimizer: muon
