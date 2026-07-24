@@ -1,59 +1,81 @@
-use pyo3::prelude::*;
-use std::collections::HashMap;
-use rayon::prelude::*;
-use indicatif::{ProgressBar, ProgressStyle};
-use std::time::Instant;
-use rayon::ThreadPoolBuilder;
-use std::sync::Arc;
 use fxhash::FxHashMap;
+use pyo3::{
+    exceptions::{PyKeyError, PyRuntimeError, PyValueError},
+    prelude::*,
+};
+use rayon::{prelude::*, ThreadPoolBuilder};
 
+const PARALLEL_THRESHOLD: usize = 16_384;
 
-#[inline(always)]
-fn merge(ids: &mut Vec<u32>, pair: (u32, u32), new_id: u32) {
-    let mut i = 0;
+type Pair = (u32, u32);
+type MergeRule = (u32, u32, u32);
+type PairCounts = FxHashMap<Pair, usize>;
+
+#[inline]
+fn merge(ids: &mut Vec<u32>, pair: Pair, new_id: u32) {
+    let mut read = 0;
     let mut write = 0;
-    while i < ids.len() {
-        if i + 1 < ids.len() && (ids[i], ids[i + 1]) == pair {
+
+    while read < ids.len() {
+        if read + 1 < ids.len() && (ids[read], ids[read + 1]) == pair {
             ids[write] = new_id;
-            write += 1;
-            i += 2;
+            read += 2;
         } else {
-            ids[write] = ids[i];
-            write += 1;
-            i += 1;
+            ids[write] = ids[read];
+            read += 1;
         }
+
+        write += 1;
     }
+
     ids.truncate(write);
 }
 
-fn get_stats(ids: &[u32]) -> FxHashMap<(u32, u32), u32> {
-    if ids.len() < 1000 {
-        let mut acc = FxHashMap::default();
-        for window in ids.windows(2) {
-            *acc.entry((window[0], window[1])).or_insert(0) += 1;
-        }
-        acc
-    } else {
-        ids.par_windows(2)
-            .fold(FxHashMap::default, |mut acc, window| {
-                *acc.entry((window[0], window[1])).or_insert(0) += 1;
-                acc
-            })
-            .reduce(FxHashMap::default, |mut acc1, acc2| {
-                for (k, v) in acc2 {
-                    *acc1.entry(k).or_insert(0) += v;
-                }
-                acc1
-            })
+fn get_stats(ids: &[u32]) -> PairCounts {
+    if ids.len() < 2 {
+        return PairCounts::default();
     }
+
+    if ids.len() < PARALLEL_THRESHOLD {
+        let mut counts = PairCounts::default();
+
+        for window in ids.windows(2) {
+            *counts.entry((window[0], window[1])).or_default() += 1;
+        }
+
+        return counts;
+    }
+
+    ids.par_windows(2)
+        .fold(PairCounts::default, |mut counts, window| {
+            *counts.entry((window[0], window[1])).or_default() += 1;
+            counts
+        })
+        .reduce(PairCounts::default, |mut left, mut right| {
+            if left.len() < right.len() {
+                std::mem::swap(&mut left, &mut right);
+            }
+
+            for (pair, count) in right {
+                *left.entry(pair).or_default() += count;
+            }
+
+            left
+        })
 }
 
-fn byte_to_string(b: u8) -> String {
-    if b <= 127 {
-        String::from_utf8(vec![b]).unwrap()
-    } else {
-        format!("<{}>", b)
+fn best_pair(counts: &PairCounts) -> Option<Pair> {
+    let mut best = None;
+
+    for (&pair, &count) in counts {
+        if best.map_or(true, |(best_pair, best_count)| {
+            count > best_count || (count == best_count && pair < best_pair)
+        }) {
+            best = Some((pair, count));
+        }
     }
+
+    best.map(|(pair, _)| pair)
 }
 
 #[pyfunction]
@@ -61,156 +83,96 @@ fn byte_pair_encoding(
     text: &str,
     num_merges: usize,
     num_threads: usize,
-) -> PyResult<(Vec<u32>, HashMap<u32, String>, Vec<(Vec<u32>, u32)>)> {
-    let start_total = Instant::now();
+) -> PyResult<(Vec<u32>, Vec<Vec<u8>>, Vec<MergeRule>)> {
+    if num_threads == 0 {
+        return Err(PyValueError::new_err(
+            "num_threads must be greater than zero",
+        ));
+    }
+
     let pool = ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()
-        .unwrap();
-    let pool = Arc::new(pool);
+        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
 
-    let mut ids: Vec<u32> = text.as_bytes().iter().map(|&b| b as u32).collect();
-    let mut vocab: HashMap<u32, String> =
-        (0..256).map(|idx| (idx, byte_to_string(idx as u8))).collect();
-    let mut vocab_tokens: HashMap<u32, Vec<u32>> = (0..256).map(|idx| (idx, vec![idx])).collect();
+    let mut ids: Vec<u32> = text.bytes().map(u32::from).collect();
+    let mut vocab: Vec<Vec<u8>> = (0..=u8::MAX).map(|byte| vec![byte]).collect();
     let mut merges = Vec::new();
 
-    let pb = ProgressBar::new(num_merges as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
-            .unwrap()
-            .progress_chars("##-"),
-    );
+    for _ in 0..num_merges {
+        let counts = pool.install(|| get_stats(&ids));
 
-    for i in 0..num_merges {
-        let pairs = pool.install(|| get_stats(&ids));
-
-        if pairs.is_empty() {
+        let Some((left, right)) = best_pair(&counts) else {
             break;
-        }
+        };
 
-        let best = pool
-            .install(|| pairs.par_iter().max_by_key(|&(_, count)| count))
-            .and_then(|(&pair, _)| Some(pair));
+        let new_id = u32::try_from(vocab.len())
+            .map_err(|_| PyValueError::new_err("vocabulary exceeds u32 token IDs"))?;
 
-        if let Some(best_pair) = best {
-            let new_id = 256 + i as u32;
+        merge(&mut ids, (left, right), new_id);
 
-            merge(&mut ids, best_pair, new_id);
+        let mut token = vocab[left as usize].clone();
+        token.extend_from_slice(&vocab[right as usize]);
 
-            vocab.insert(
-                new_id,
-                vocab[&best_pair.0].clone() + &vocab[&best_pair.1],
-            );
-
-            let mut new_token = vocab_tokens.get(&best_pair.0).unwrap().clone();
-            new_token.extend(vocab_tokens.get(&best_pair.1).unwrap());
-            vocab_tokens.insert(new_id, new_token.clone());
-
-            merges.push((new_token, new_id));
-
-            pb.set_message(format!("Merge {}", i + 1));
-            pb.inc(1);
-        } else {
-            break;
-        }
+        vocab.push(token);
+        merges.push((left, right, new_id));
     }
-
-    pb.finish_with_message("BPE completed");
-
-    let total_duration = start_total.elapsed();
-    println!("Total time for byte_pair_encoding: {:?}", total_duration);
 
     Ok((ids, vocab, merges))
 }
 
-
-struct TrieNode {
-    children: HashMap<u32, TrieNode>,
-    token_id: Option<u32>,
-}
-
-impl TrieNode {
-    fn new() -> Self {
-        TrieNode {
-            children: HashMap::new(),
-            token_id: None,
-        }
-    }
-
-    fn insert(&mut self, token: &[u32], token_id: u32) {
-        let mut node = self;
-        for &id in token {
-            node = node.children.entry(id).or_insert_with(TrieNode::new);
-        }
-        node.token_id = Some(token_id);
-    }
-}
-
 #[pyfunction]
-fn encode_symbol(text: &str, merges: Vec<(Vec<u32>, u32)>) -> PyResult<Vec<u32>> {
-    let ids: Vec<u32> = text.as_bytes().iter().map(|&b| b as u32).collect();
+fn encode_symbol(text: &str, merges: Vec<MergeRule>) -> Vec<u32> {
+    let mut ids: Vec<u32> = text.bytes().map(u32::from).collect();
 
-    let mut trie_root = TrieNode::new();
+    let ranks: FxHashMap<Pair, (usize, u32)> = merges
+        .into_iter()
+        .enumerate()
+        .map(|(rank, (left, right, new_id))| ((left, right), (rank, new_id)))
+        .collect();
 
-    for b in 0..=255u32 {
-        trie_root.insert(&[b], b);
-    }
+    loop {
+        let mut best = None;
 
-    for (token_sequence, token_id) in &merges {
-        trie_root.insert(&token_sequence, *token_id);
-    }
+        for window in ids.windows(2) {
+            let pair = (window[0], window[1]);
 
-    let mut output_ids = Vec::new();
-    let mut i = 0;
-    while i < ids.len() {
-        let mut node = &trie_root;
-        let mut match_len = 0;
-        let mut match_id = None;
-
-        for j in i..ids.len() {
-            let id = ids[j];
-            if let Some(child) = node.children.get(&id) {
-                node = child;
-                if let Some(token_id) = node.token_id {
-                    match_len = j - i + 1;
-                    match_id = Some(token_id);
+            if let Some(&(rank, new_id)) = ranks.get(&pair) {
+                if best.map_or(true, |(best_rank, _, _)| rank < best_rank) {
+                    best = Some((rank, pair, new_id));
                 }
-            } else {
-                break;
             }
         }
 
-        if let Some(token_id) = match_id {
-            output_ids.push(token_id);
-            i += match_len;
-        } else {
-            output_ids.push(ids[i]);
-            i += 1;
-        }
+        let Some((_, pair, new_id)) = best else {
+            break;
+        };
+
+        merge(&mut ids, pair, new_id);
     }
 
-    Ok(output_ids)
+    ids
 }
 
 #[pyfunction]
-fn decode_symbol(ids: Vec<u32>, vocab: HashMap<u32, String>) -> PyResult<String> {
-    let mut result = String::new();
+fn decode_symbol(ids: Vec<u32>, vocab: Vec<Vec<u8>>) -> PyResult<String> {
+    let mut bytes = Vec::new();
+
     for id in ids {
-        if let Some(token) = vocab.get(&id) {
-            result.push_str(token);
-        } else {
-            result.push_str(&format!("<UNK:{}>", id));
-        }
+        let token = vocab
+            .get(id as usize)
+            .ok_or_else(|| PyKeyError::new_err(format!("unknown token ID: {id}")))?;
+
+        bytes.extend_from_slice(token);
     }
-    Ok(result)
+
+    String::from_utf8(bytes).map_err(|error| PyValueError::new_err(error.to_string()))
 }
 
 #[pymodule]
-fn bpe(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(byte_pair_encoding, m)?)?;
-    m.add_function(wrap_pyfunction!(encode_symbol, m)?)?;
-    m.add_function(wrap_pyfunction!(decode_symbol, m)?)?;
+fn bpe(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(byte_pair_encoding, module)?)?;
+    module.add_function(wrap_pyfunction!(encode_symbol, module)?)?;
+    module.add_function(wrap_pyfunction!(decode_symbol, module)?)?;
     Ok(())
 }
