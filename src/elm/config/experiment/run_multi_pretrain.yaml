@@ -4,7 +4,7 @@ defaults:
   - ../gpu/distributed.yaml
 
 seed: 0
-dev: true
+dev: false
 
 training:
   optimizer: muon

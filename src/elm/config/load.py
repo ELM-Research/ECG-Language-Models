@@ -3,6 +3,8 @@ from typing import Any
 import argparse
 import yaml
 
+from elm.utils.parallelism import is_main
+
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     result = base.copy()
@@ -39,5 +41,5 @@ def get_config() -> dict:
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
     config = load_config(args.config)
-    print("CONFIG:\n", config, "\n", "==="*30)
-    return config
+    if is_main(): print("CONFIG:\n", config, "\n", "==="*30)
+    return config, Path(args.config).stem
