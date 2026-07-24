@@ -3,7 +3,7 @@ import torch
 from elm.config.load import get_config
 from elm.utils.parallelism import init_dist, cleanup, is_main
 from elm.utils.seed import set_seed
-from elm.utils.logging import setup_experiment_folder
+from elm.utils.logging import setup_experiment_folder, setup_wandb, cleanup_wandb
 
 RUNS_DIR = "./src/runs"
 
@@ -19,11 +19,11 @@ if __name__ == "__main__":
                 f'{RUNS_DIR}/{exp_name}',
                 config,)
             print(f"Run folder: {run_folder}")
-            # if args.wandb:
-            #     setup_wandb(args)
+            if config["wandb"]:
+                setup_wandb(config)
         set_seed(config["seed"])
 
 
     finally:
-        if config["gpu"]["distributed"]:
-            cleanup()
+        if config["wandb"] and is_main(): cleanup_wandb()
+        if config["gpu"]["distributed"]: cleanup()

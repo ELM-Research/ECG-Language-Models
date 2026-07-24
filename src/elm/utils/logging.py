@@ -5,7 +5,7 @@ import wandb
 from pathlib import Path
 import yaml
 
-def setup_wandb(config, project = "ecg-bench-new", name = None):
+def setup_wandb(config, project = "test", name = None):
     print("Initializing Wandb")
     wandb.init(project=project, config=config, name = name,)
 

@@ -5,6 +5,7 @@ defaults:
 
 seed: 0
 dev: false
+wandb: true
 
 training:
   optimizer: muon
