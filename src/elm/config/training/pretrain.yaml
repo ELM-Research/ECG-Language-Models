@@ -4,4 +4,7 @@ training:
 data:
   data_names: # yaml list
     - ELM-Research/pretrain-stage1
-    - ELM-Research/pretrain-stage1
+    - ELM-Research/pretrain-stage2
+  split_names: # corresponding to data_names
+    - fold1_train
+    - fold1_train
