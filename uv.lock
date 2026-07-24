@@ -707,14 +707,14 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-rust = [
+ecg-byte = [
     { name = "bpe" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "accelerate" },
-    { name = "bpe", marker = "extra == 'rust'", editable = "src/elm/data/representations/bpe" },
+    { name = "bpe", marker = "extra == 'ecg-byte'", editable = "src/elm/data/representations/bpe" },
     { name = "datasets", specifier = ">=4.4.2" },
     { name = "ecg-plot", specifier = ">=0.2.8" },
     { name = "einops", specifier = ">=0.8.2" },
@@ -749,7 +749,7 @@ requires-dist = [
     { name = "wfdb", specifier = ">=4.3.0" },
     { name = "wheel" },
 ]
-provides-extras = ["rust"]
+provides-extras = ["ecg-byte"]
 
 [[package]]
 name = "filelock"
