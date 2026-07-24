@@ -238,6 +238,11 @@ wheels = [
 ]
 
 [[package]]
+name = "bpe"
+version = "0.0.1"
+source = { editable = "src/elm/data/representations/bpe" }
+
+[[package]]
 name = "certifi"
 version = "2026.7.22"
 source = { registry = "https://pypi.org/simple" }
@@ -701,9 +706,15 @@ dependencies = [
     { name = "wheel" },
 ]
 
+[package.optional-dependencies]
+rust = [
+    { name = "bpe" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "accelerate" },
+    { name = "bpe", marker = "extra == 'rust'", editable = "src/elm/data/representations/bpe" },
     { name = "datasets", specifier = ">=4.4.2" },
     { name = "ecg-plot", specifier = ">=0.2.8" },
     { name = "einops", specifier = ">=0.8.2" },
@@ -738,6 +749,7 @@ requires-dist = [
     { name = "wfdb", specifier = ">=4.3.0" },
     { name = "wheel" },
 ]
+provides-extras = ["rust"]
 
 [[package]]
 name = "filelock"
