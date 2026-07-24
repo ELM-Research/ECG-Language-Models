@@ -1,12 +1,10 @@
 import gc
 import torch
-import bpe
 from elm.config.load import get_config
 from elm.utils.parallelism import init_dist, cleanup
 
 if __name__ == "__main__":
     config = get_config()
-    print(config)
     if config["gpu"]["distributed"]: init_dist()
     gc.collect()
     torch.cuda.empty_cache()

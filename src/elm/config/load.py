@@ -38,4 +38,6 @@ def get_config() -> dict:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
-    return load_config(args.config)
+    config = load_config(args.config)
+    print("CONFIG:\n", config, "\n", "==="*30)
+    return config
