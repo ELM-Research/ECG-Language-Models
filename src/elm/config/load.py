@@ -41,5 +41,4 @@ def get_config() -> dict:
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
     config = load_config(args.config)
-    if is_main(): print("CONFIG:\n", config, "\n", "==="*30)
     return config, Path(args.config).stem

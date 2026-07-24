@@ -18,9 +18,7 @@ if __name__ == "__main__":
             run_folder = setup_experiment_folder(
                 f'{RUNS_DIR}/{exp_name}',
                 config,)
-            print(f"Run folder: {run_folder}")
-            if config["wandb"]:
-                setup_wandb(config)
+            if config["wandb"]: setup_wandb(config)
         set_seed(config["seed"])
 
 

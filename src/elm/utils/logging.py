@@ -5,8 +5,10 @@ import wandb
 from pathlib import Path
 import yaml
 
+from elm.utils.parallelism import is_main
+
 def setup_wandb(config, project = "test", name = None):
-    print("Initializing Wandb")
+    if is_main(): print("Initializing Wandb")
     wandb.init(project=project, config=config, name = name,)
 
 def cleanup_wandb():
@@ -26,10 +28,7 @@ def timeit(fn, desc="", dev=False):
     print(f"{desc} Timing: {time.time() - start:.4f}s")
     return out
 
-def setup_experiment_folder(
-    base_run_dir: str | Path,
-    config: dict,
-) -> Path:
+def setup_experiment_folder(base_run_dir: str | Path, config: dict,) -> Path:
     base_run_dir = Path(base_run_dir)
     base_run_dir.mkdir(parents=True, exist_ok=True)
     run_ids = (
@@ -41,4 +40,7 @@ def setup_experiment_folder(
     run_dir.mkdir()
     with (run_dir / "config.yaml").open("w") as file:
         yaml.safe_dump(config, file, sort_keys=False)
+    if is_main():
+        print("CONFIG:\n", config, "\n", "==="*30)
+        print(f"Run folder: {run_dir}")
     return run_dir
