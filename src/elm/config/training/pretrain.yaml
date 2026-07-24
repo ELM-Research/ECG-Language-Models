@@ -1,2 +1,5 @@
 training:
   optimizer: muon
+
+data:
+  data_names: ELM-Research/pretrain-stage1 ELM-Research/pretrain-stage1

@@ -7,7 +7,7 @@ from typing import Optional, Union
 import yaml
 import argparse
 
-from utils.parallelism_protection import is_main, barrier, broadcast_value
+from elm.utils.parallelism import is_main, barrier, broadcast_value
 
 def setup_wandb(args, project = "ecg-bench-new", name = None):
     print("Initializing Wandb")
