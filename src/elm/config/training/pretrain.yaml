@@ -1,6 +1,7 @@
 training:
   optimizer: muon
 
+
 data:
   data_names: # yaml list
     - ELM-Research/pretrain-stage1
@@ -8,3 +9,10 @@ data:
   split_names: # corresponding to data_names
     - fold1_train
     - fold1_train
+
+  data_subset: null
+
+  modality: signal
+
+  batch_size: 2
+  num_workers: 2

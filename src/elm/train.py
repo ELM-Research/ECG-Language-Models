@@ -1,5 +1,6 @@
 import gc
 import torch
+from elm.data.build import BuildDataloader
 from elm.config.load import get_config
 from elm.utils.parallelism import init_dist, cleanup, is_main
 from elm.utils.seed import set_seed
@@ -9,7 +10,9 @@ RUNS_DIR = "./src/runs"
 
 if __name__ == "__main__":
     config, exp_name = get_config()
+
     if config["gpu"]["distributed"]: init_dist()
+
     gc.collect()
     torch.cuda.empty_cache()
 
@@ -18,9 +21,12 @@ if __name__ == "__main__":
             run_folder = setup_experiment_folder(
                 f'{RUNS_DIR}/{exp_name}',
                 config,)
+
             if config["wandb"]: setup_wandb(config)
+
         set_seed(config["seed"])
 
+        
 
     finally:
         if config["wandb"] and is_main(): cleanup_wandb()

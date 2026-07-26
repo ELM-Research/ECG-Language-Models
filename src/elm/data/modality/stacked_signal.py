@@ -1,0 +1,2 @@
+class StackedSignal:
+    pass
