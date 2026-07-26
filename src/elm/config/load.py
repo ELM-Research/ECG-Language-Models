@@ -3,9 +3,6 @@ from typing import Any
 import argparse
 import yaml
 
-from elm.utils.parallelism import is_main
-
-
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     result = base.copy()
 
@@ -36,7 +33,7 @@ def load_config(path: str | Path, stack: tuple[Path, ...] = ()) -> dict[str, Any
 
     return deep_merge(config, raw)
 
-def get_config() -> dict:
+def get_config() -> tuple[dict, str]:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
