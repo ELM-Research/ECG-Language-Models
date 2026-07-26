@@ -52,10 +52,14 @@ def _expand_enc(enc_out: dict, idx: int, G: int) -> dict:
 
 
 def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int) -> torch.Tensor:
-    """Forward pass → log π(y_t | ...) for t in [pL, total_len). Returns (G, gen_len)."""
-    out = model(elm_input_ids=ids, elm_attention_mask=attn, elm_labels=None,
-                signal_id_indices=sig_idx, encoder_tokenizer_out=enc_out)
-    logits = out.logits[:, pL - 1:-1, :]                       # predictions for positions [pL, total_len)
+    was_training = model.training
+    model.eval()
+    try:
+        out = model(elm_input_ids=ids, elm_attention_mask=attn, elm_labels=None,
+                    signal_id_indices=sig_idx, encoder_tokenizer_out=enc_out)
+    finally:
+        model.train(was_training)
+    logits = out.logits[:, pL - 1:-1, :]
     targets = ids[:, pL:]
     return torch.log_softmax(logits.float(), dim=-1).gather(-1, targets.unsqueeze(-1)).squeeze(-1)
 
@@ -112,11 +116,7 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
 
         full_ids = torch.cat([pb["elm_input_ids"], new_tokens], dim=1)
         full_attn = torch.cat([pb["elm_attention_mask"], resp_mask], dim=1)
-        # Score old_log_prob in the SAME train/eval mode as current_log_prob
-        # (model left in train mode below) so the on-policy SAPO ratio is
-        # exactly 1 and not biased by eval-vs-train numerics.
-        if was_training:
-            base.train()
+
         with torch.no_grad():
             old_lp = _log_prob_at_response(base, full_ids, full_attn,
                                            pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL)
