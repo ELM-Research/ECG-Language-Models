@@ -8,7 +8,7 @@ class Base:
                  text_preparer,
                  norm_eps: float = 1e-6,
                  augmentation: bool = False,
-                 perturbation: Literal["blackout", "gaussian"] = None):
+                 perturbation: Literal["blackout", "gaussian"] | None = None):
         self.data = data
         self.ecg_modality = ecg_modality
         self.text_preparer = text_preparer
