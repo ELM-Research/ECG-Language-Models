@@ -51,7 +51,7 @@ def _expand_enc(enc_out: dict, idx: int, G: int) -> dict:
     return out
 
 
-def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int) -> torch.Tensor:
+def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int, temperature: float) -> torch.Tensor:
     was_training = model.training
     model.eval()
     try:
@@ -59,7 +59,7 @@ def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int) -> torch.
                     signal_id_indices=sig_idx, encoder_tokenizer_out=enc_out)
     finally:
         model.train(was_training)
-    logits = out.logits[:, pL - 1:-1, :]
+    logits = out.logits[:, pL - 1:-1, :] / temperature
     targets = ids[:, pL:]
     return torch.log_softmax(logits.float(), dim=-1).gather(-1, targets.unsqueeze(-1)).squeeze(-1)
 
@@ -119,7 +119,8 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
 
         with torch.no_grad():
             old_lp = _log_prob_at_response(base, full_ids, full_attn,
-                                           pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL)
+                                           pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL,
+                                           args.rl_temperature)
     finally:
         if was_training:
             base.train()
@@ -128,10 +129,10 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
         "full_ids": full_ids, "full_attn": full_attn,
         "sig_idx": pb["signal_id_indices"], "enc_out": pb["encoder_tokenizer_out"],
         "resp_mask": resp_mask, "advantages": adv, "old_log_prob": old_lp, "pL": pL,
-        "mean_reward": rewards.mean().item(), "degenerate": degenerate,
+        "mean_reward": rewards.mean().item(), "degenerate": degenerate, "temperature": args.rl_temperature,
     }
 
 
 def current_log_prob(model, ro: dict) -> torch.Tensor:
     """Log-prob of rollout under the current (post-update) policy (keeps DDP graph)."""
-    return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["sig_idx"], ro["enc_out"], ro["pL"])
+    return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["sig_idx"], ro["enc_out"], ro["pL"], ro["temperature"])
