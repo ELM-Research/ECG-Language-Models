@@ -1,11 +1,31 @@
 defaults:
-  - ../model/qwen3.5-0.8b-base_siglip-ecg.yaml
-  - ../training/pretrain.yaml
-  - ../gpu/single.yaml
-
-seed: 0
-dev: false
-wandb: false
+  - ../common.yaml
 
 training:
   optimizer: muon
+
+gpu:
+  distributed: False
+
+model:
+  
+  llm: qwen3.5-0.8b-base
+  llm_tokenizer: qwen3.5-0.8b-base
+  
+  encoder: siglip-ecg
+  encoder_tokenizer: null
+
+data:
+  data_names: # yaml list
+    - ELM-Research/pretrain-stage1
+    - ELM-Research/pretrain-stage2
+  split_names: # corresponding to data_names
+    - fold1_train
+    - fold1_train
+
+  data_subset: null
+
+  modality: signal
+
+  batch_size: 2
+  num_workers: 2
