@@ -51,7 +51,8 @@ def main():
         set_seed(args.seed)
         build_dataloader = BuildDataLoader(args)
         dataloader = build_dataloader.build_dataloader()
-        args.max_steps = math.ceil(len(dataloader) / args.grad_accum_steps) * args.epochs
+        updates = args.rl_updates_per_rollout if args.train_phase == "rl" else 1
+        args.max_steps = math.ceil(len(dataloader) / args.grad_accum_steps) * args.epochs * updates
         build_elm = BuildELM(args)
         elm_components = build_elm.build_elm(dataloader.dataset.llm_tokenizer)
         gpu_setup = GPUSetup(args)

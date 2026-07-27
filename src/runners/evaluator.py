@@ -34,7 +34,7 @@ def calculate_acc(references, hypotheses):
 def evaluate_strings(references, hypotheses):
     if len(references) != len(hypotheses):
         raise ValueError("The number of references and hypotheses must be the same.")
-    valid_pairs = [(ref, hyp) for ref, hyp in zip(references, hypotheses) if ref and hyp]
+    valid_pairs = [(ref, hyp) for ref, hyp in zip(references, hypotheses) if ref]
     if not valid_pairs:
         return {
             "ACC": 0.0,
@@ -349,7 +349,7 @@ def evaluate(elm, dataloader, args):
                         print(f"\nGround Truth:\n{gt}")
                         print(f"\nGenerated:\n{gen_txt}")
                         print("-" * 100)
-                    if gt and gen_txt:
+                    if gt:
                         all_prompts.append(dataset.llm_tokenizer.decode(sub_ids, skip_special_tokens=True).strip())
                         all_refs.append(gt)
                         all_hyps.append(gen_txt)
@@ -360,7 +360,7 @@ def evaluate(elm, dataloader, args):
             # input()
     refs_t, refs_a = map(list, zip(*map(split_response, all_refs))) if all_refs else ([], [])
     hyps_t, hyps_a = map(list, zip(*map(split_response, all_hyps))) if all_hyps else ([], [])
-    think_pairs = [(r, h) for r, h in zip(refs_t, hyps_t) if r and h]
+    think_pairs = [(r, h) for r, h in zip(refs_t, hyps_t) if r]
     results = {"answer": evaluate_strings(refs_a, hyps_a)}
     if think_pairs:
         results["thinking"] = evaluate_strings(*map(list, zip(*think_pairs)))

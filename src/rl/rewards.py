@@ -1,10 +1,10 @@
 import re
 
-_FMT_X = re.compile(r"^\s*[\s\S]*?</think>[\s\S]*?<answer>[\s\S]*?</answer>\s*$")
-_FMT_NX = re.compile(r"^\s*<think>[\s\S]*?</think>[\s\S]*?<answer>[\s\S]*?</answer>\s*$")
+EXPLICIT_FORMAT = re.compile(r"^\s*(?![\s\S]*<think>)[\s\S]*?</think>[\s\S]*?<answer>[\s\S]*?</answer>\s*$")
+NON_EXPLICIT_FORMAT = re.compile(r"^\s*<think>[\s\S]*?</think>[\s\S]*?<answer>[\s\S]*?</answer>\s*$")
 _ANSWER = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
-_TAGS_X = ("</think>", "<answer>", "</answer>")
-_TAGS_NX = ("<think>",) + _TAGS_X
+EXPLICIT_TAGS = ("</think>", "<answer>", "</answer>")
+NON_EXPLICIT_TAGS = ("<think>",) + EXPLICIT_TAGS
 
 
 def _answer_body(text: str) -> str:
@@ -17,11 +17,11 @@ def _labels(text: str) -> set:
 
 
 def format_reward(text: str, explicit_thinking: bool) -> float:
-    return 1.0 if (_FMT_X if explicit_thinking else _FMT_NX).fullmatch(text) else 0.0
+    return 1.0 if (EXPLICIT_FORMAT if explicit_thinking else NON_EXPLICIT_FORMAT).fullmatch(text) else 0.0
 
 
 def tag_count_reward(text: str, explicit_thinking: bool) -> float:
-    tags = _TAGS_X if explicit_thinking else _TAGS_NX
+    tags = EXPLICIT_TAGS if explicit_thinking else NON_EXPLICIT_TAGS
     return sum(text.count(t) == 1 for t in tags) / len(tags)
 
 
@@ -32,7 +32,13 @@ def answer_reward(text: str, gt: str) -> float:
     return 0.5 * f1 + 0.5 * exact
 
 
+def reward_components(text: str, gt: str, explicit_thinking: bool = True) -> dict[str, float]:
+    return {
+        "format": format_reward(text, explicit_thinking),
+        "tag_count": tag_count_reward(text, explicit_thinking),
+        "answer": answer_reward(text, gt),
+    }
+
+
 def compute_reward(text: str, gt: str, explicit_thinking: bool = True) -> float:
-    return (format_reward(text, explicit_thinking)
-            + tag_count_reward(text, explicit_thinking)
-            + answer_reward(text, gt))
+    return sum(reward_components(text, gt, explicit_thinking).values())

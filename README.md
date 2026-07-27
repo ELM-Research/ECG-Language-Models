@@ -213,7 +213,7 @@ We support three training phases via the `--train_phase` flag. Each phase reuses
 |-----------------|-------------|
 | `pretrain` | Raw text + `bos/signal/eos` tokens, no chat template. Intended for connector / encoder alignment on large unlabeled corpora. |
 | `sft` | Chat-template supervised finetuning. Use `--explicit_thinking` to mask loss up to `<think>\n` for chain-of-thought style training. |
-| `rl` | RL post-training on top of an SFT checkpoint. Currently supports [SAPO](https://arxiv.org/abs/2505.18847) via `--rl_algo sapo`. |
+| `rl` | RL post-training on top of an SFT checkpoint. Currently supports [SAPO](https://arxiv.org/pdf/2511.20347) via `--rl_algo sapo`. |
 
 ### Pretrain
 Pretrain the connector (and optionally the encoder / LLM) with raw signal-conditioned text.

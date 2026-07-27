@@ -93,4 +93,5 @@ def get_args(mode: Mode) -> argparse.Namespace:
         parser.add_argument("--rl_tau_neg", type=float, default=1.05, help="SAPO temperature for negative advantages")
         parser.add_argument("--rl_loss_agg_mode", type=str, default="seq-mean-token-mean",
                             choices=["token-mean", "seq-mean-token-sum", "seq-mean-token-sum-norm", "seq-mean-token-mean"])
+        parser.add_argument("--rl_updates_per_rollout", type = int, default = 2)
     return parser.parse_args()

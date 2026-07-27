@@ -49,7 +49,8 @@ def compute_policy_loss_sapo(
     )
 
     # compute the gates f_{i,t}(r_{i,t}(θ)) at token level
-    gates = torch.sigmoid(taus * (ratio - 1.0)) * (4.0 / taus)
+    gate_probs = torch.sigmoid(taus * (ratio - 1.0))
+    gates = gate_probs * (4.0 / taus)
 
     # compute policy gradient loss
     pg_losses = -gates * advantages
@@ -64,16 +65,10 @@ def compute_policy_loss_sapo(
         loss_agg_mode=loss_agg_mode, global_batch_size=global_batch_size, dp_size=dp_size,
     )
 
-    # For compatibility, return zero for both pg_clipfrac and pg_clipfrac_lower (not used in SAPO)
-    pg_clipfrac = torch.tensor(0.0, device=pg_loss.device)
-    pg_clipfrac_lower = torch.tensor(0.0, device=pg_loss.device)
-    # compute KL for metrics tracking
-    ppo_kl = masked_mean(-negative_approx_kl, response_mask)
-    # return metrics dict
     pg_metrics = {
-        "actor/pg_clipfrac": pg_clipfrac.detach().item(),
-        "actor/ppo_kl": ppo_kl.detach().item(),
-        "actor/pg_clipfrac_lower": pg_clipfrac_lower.detach().item(),
+        "actor/ppo_kl": masked_mean(-negative_approx_kl, response_mask).detach().item(),
+        "actor/importance_ratio": masked_mean(ratio, response_mask).detach().item(),
+        "actor/sapo_weight": masked_mean(4 * gate_probs * (1 - gate_probs), response_mask).detach().item(),
     }
 
     return pg_loss, pg_metrics
