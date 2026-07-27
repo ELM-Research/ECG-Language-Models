@@ -1,8 +1,9 @@
 """Group rollout: per-prompt, sample G trajectories, score, build tensors for policy-loss computation."""
 import torch
+from transformers import TopPLogitsWarper
 
 from configs.constants import HF_LLMS
-from rl.rewards import compute_reward
+from rl.rewards import reward_components
 
 
 def _unwrap(m):
@@ -51,7 +52,7 @@ def _expand_enc(enc_out: dict, idx: int, G: int) -> dict:
     return out
 
 
-def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int, temperature: float) -> torch.Tensor:
+def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int, temperature: float, top_p: float) -> torch.Tensor:
     was_training = model.training
     model.eval()
     try:
@@ -59,8 +60,10 @@ def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int, temperatu
                     signal_id_indices=sig_idx, encoder_tokenizer_out=enc_out)
     finally:
         model.train(was_training)
-    logits = out.logits[:, pL - 1:-1, :] / temperature
     targets = ids[:, pL:]
+    logits = out.logits[:, pL - 1:-1, :] / temperature
+    if top_p < 1.0:
+        logits = TopPLogitsWarper(top_p)(targets.flatten()[:, None], logits.flatten(0, 1)).view_as(logits)
     return torch.log_softmax(logits.float(), dim=-1).gather(-1, targets.unsqueeze(-1)).squeeze(-1)
 
 
@@ -96,7 +99,8 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
         base.eval()
         with torch.no_grad():
             gen = base.generate(**pb, max_new_tokens=args.rl_max_new_tokens,
-                                do_sample=True, temperature=args.rl_temperature, top_p=args.rl_top_p)
+                                do_sample=True, temperature=args.rl_temperature,
+                                top_p=args.rl_top_p, top_k=0)
 
         new_tokens = gen[:, pL:] if gen.shape[1] > pL and torch.equal(gen[0, :pL], prompt_ids) else gen
         if new_tokens.shape[1] == 0:                                 # pathological: nothing generated
@@ -104,10 +108,12 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
 
         resp_mask = _trim_mask(new_tokens, eos_ids, int(tokenizer.pad_token_id))  # (G, gen_len)
 
-        rewards = torch.tensor(
-            [compute_reward(_decode_for_reward(tokenizer, new_tokens[i][resp_mask[i].bool()], strip_ids),
-                            gt_text, getattr(args, "explicit_thinking", False))
-             for i in range(G)], dtype=torch.float32, device=device)
+        reward_parts = [
+            reward_components(_decode_for_reward(tokenizer, new_tokens[i][resp_mask[i].bool()], strip_ids),
+                              gt_text, getattr(args, "explicit_thinking", False))
+            for i in range(G)
+        ]
+        rewards = torch.tensor([sum(parts.values()) for parts in reward_parts], dtype=torch.float32, device=device)
         reward_std = rewards.std(unbiased=False)
         # All G samples scored identically: group-relative advantage is pure
         # 1e-6-scaled noise. Flag so the trainer can skip this prompt.
@@ -120,7 +126,7 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
         with torch.no_grad():
             old_lp = _log_prob_at_response(base, full_ids, full_attn,
                                            pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL,
-                                           args.rl_temperature)
+                                           args.rl_temperature, args.rl_top_p)
     finally:
         if was_training:
             base.train()
@@ -129,10 +135,13 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
         "full_ids": full_ids, "full_attn": full_attn,
         "sig_idx": pb["signal_id_indices"], "enc_out": pb["encoder_tokenizer_out"],
         "resp_mask": resp_mask, "advantages": adv, "old_log_prob": old_lp, "pL": pL,
-        "mean_reward": rewards.mean().item(), "degenerate": degenerate, "temperature": args.rl_temperature,
+        "mean_reward": rewards.mean().item(), "degenerate": degenerate,
+        "mean_reward_components": {k: sum(parts[k] for parts in reward_parts) / G for k in reward_parts[0]},
+        "temperature": args.rl_temperature, "top_p": args.rl_top_p,
     }
 
 
 def current_log_prob(model, ro: dict) -> torch.Tensor:
     """Log-prob of rollout under the current (post-update) policy (keeps DDP graph)."""
-    return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["sig_idx"], ro["enc_out"], ro["pL"], ro["temperature"])
+    return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["sig_idx"], ro["enc_out"],
+                                 ro["pL"], ro["temperature"], ro["top_p"])

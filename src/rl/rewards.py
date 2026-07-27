@@ -32,7 +32,13 @@ def answer_reward(text: str, gt: str) -> float:
     return 0.5 * f1 + 0.5 * exact
 
 
+def reward_components(text: str, gt: str, explicit_thinking: bool = True) -> dict[str, float]:
+    return {
+        "format": format_reward(text, explicit_thinking),
+        "tag_count": tag_count_reward(text, explicit_thinking),
+        "answer": answer_reward(text, gt),
+    }
+
+
 def compute_reward(text: str, gt: str, explicit_thinking: bool = True) -> float:
-    return (format_reward(text, explicit_thinking)
-            + tag_count_reward(text, explicit_thinking)
-            + answer_reward(text, gt))
+    return sum(reward_components(text, gt, explicit_thinking).values())
