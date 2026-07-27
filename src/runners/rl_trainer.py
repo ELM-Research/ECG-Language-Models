@@ -14,12 +14,13 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
         dataloader.sampler.set_epoch(epoch)
 
     show_progress = is_main()
-    total_loss, total_steps, accum_loss_for_log, accum_reward_for_log = 0.0, 0, 0.0, 0.0
+    total_loss, total_steps = 0.0, 0
     progress = tqdm(dataloader, desc=f"RL[{args.rl_algo}] LLM:{args.llm} Epoch:{epoch}",
                     disable=not show_progress, leave=False)
 
     device = next(nn.parameters()).device
     accum_steps = getattr(args, "grad_accum_steps", 1)
+    updates = getattr(args, "rl_updates_per_rollout", 2)
     total_steps_per_epoch = len(dataloader)
     loss_fn = get_rl_loss(args.rl_algo)
     algo_kw = get_loss_kwargs(args.rl_algo, args)
@@ -27,52 +28,50 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
     tokenizer = dataloader.dataset.llm_tokenizer
 
     optimizer.zero_grad()
+    rollouts, reward_sum = [], 0.0
     for step, batch in enumerate(progress):
         batch = {k: batch_to_device(v, device) for k, v in batch.items()}
         B = batch["elm_input_ids"].shape[0]
-        gbs = B * args.rl_group_size * dp_size
-        step_loss, step_reward, last_metrics = 0.0, 0.0, {}
         for i in range(B):
             ro = rollout_group(nn, batch, i, tokenizer, args)
-            step_reward += ro["mean_reward"]
-            log_prob = current_log_prob(nn, ro)
-            loss, metrics = loss_fn(old_log_prob=ro["old_log_prob"], log_prob=log_prob,
-                                    advantages=ro["advantages"], response_mask=ro["resp_mask"],
-                                    global_batch_size=gbs, dp_size=dp_size, **algo_kw)
-            # Degenerate groups (zero reward variance -> pure-noise advantage)
-            # contribute no gradient, but we keep the forward/backward so every
-            # rank runs identical DDP collectives (skipping deadlocks NCCL).
-            (loss * (0.0 if ro["degenerate"] else 1.0) / accum_steps).backward()
-            if not ro["degenerate"]:
-                step_loss += loss.detach().item()
-                last_metrics = metrics
+            rollouts.append(ro)
+            reward_sum += ro["mean_reward"]
 
-        avg_item_loss = step_loss / B
-        total_loss += avg_item_loss
-        total_steps += 1
-        accum_loss_for_log += avg_item_loss
-        accum_reward_for_log += step_reward / B
+        avg_loss = 0.0
 
         if (step + 1) % accum_steps == 0 or (step + 1) == total_steps_per_epoch:
-            grad_clip = getattr(args, "grad_clip", 0.0)
-            if grad_clip > 0:
-                params_with_grad = [p for p in nn.parameters() if p.grad is not None]
-                if params_with_grad:
-                    torch.nn.utils.clip_grad_norm_(params_with_grad, grad_clip)
-            optimizer.step_and_update_lr()
-            optimizer.zero_grad()
+            gbs = len(rollouts) * args.rl_group_size * dp_size
+            last_metrics = {}
+            for _ in range(updates):
+                update_loss = 0.0
+                for ro in rollouts:
+                    log_prob = current_log_prob(nn, ro)
+                    loss, metrics = loss_fn(old_log_prob=ro["old_log_prob"], log_prob=log_prob,
+                                            advantages=ro["advantages"], response_mask = ro["resp_mask"],
+                                            global_batch_size=gbs, dp_size=dp_size, **algo_kw)
+                    (loss * (not ro["degenerate"])).backward()
+                    if not ro["degenerate"]:
+                        update_loss += loss.detach().item()
+                        last_metrics = metrics
+                if args.grad_clip > 0:
+                    torch.nn.utils.clip_grad_norm_((p for p in nn.parameters() if p.grad is not None), args.grad_clip)
+                optimizer.step_and_update_lr()
+                optimizer.zero_grad()
+                avg_loss += update_loss / updates
+            total_loss += avg_loss
+            total_steps += 1
 
             if getattr(args, "wandb", False) and is_main():
-                wandb.log({"train/step_loss": accum_loss_for_log, "train/lr": optimizer.learning_rate,
-                           "train/mean_reward": accum_reward_for_log / accum_steps,
+                wandb.log({"train/step_loss": avg_loss, "train/lr": optimizer.learning_rate,
+                           "train/mean_reward": reward_sum / len(rollouts),
                            "epoch": epoch, **{f"train/{k}": v for k, v in last_metrics.items()}})
-            accum_loss_for_log, accum_reward_for_log = 0.0, 0.0
+            rollouts, reward_sum = [], 0.0
 
         if args.save_step and checkpoint_manager and is_main():
             if checkpoint_manager.save_step(step, total_steps_per_epoch):
                 checkpoint_manager.save_checkpoint(nn, optimizer, epoch, step, prefix="step_")
 
-        if train_dev_break(getattr(args, "dev", False), batch, avg_item_loss):
+        if train_dev_break(getattr(args, "dev", False), batch, avg_loss):
             break
 
     average_loss = total_loss / total_steps if total_steps > 0 else float("inf")
