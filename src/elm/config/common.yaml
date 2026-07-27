@@ -1,3 +1,23 @@
 seed: 0
 dev: false
 wandb: false
+
+# Which leads to use
+# Corresponds to PTB-XL lead ordering
+# ["I", "II", "III", "aVL", "aVR", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
+leads:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+
+# ECG time length in Sampling Rate (250 Hz) * Seconds (10 sec)
+segment_length: 2500
