@@ -3,35 +3,47 @@ import numpy as np
 from typing import Tuple
 
 class Base:
-    def __init__(self, data, ecg_modality, text_preparer):
+    def __init__(self, data,
+                 ecg_modality,
+                 text_preparer,
+                 norm_eps: float = 1e-6,
+                 augmentation: bool = None,
+                 perturbation: str = None):
         self.data = data
         self.ecg_modality = ecg_modality
+        self.text_preparer = text_preparer
+        self.norm_eps = norm_eps
 
     def __len__(self) -> int:
         return len(self.data)
 
     def __getitem__(self, index: int):
         instance = self.data[index]
-        opened_npy = np.load(instance["ecg_path"], allow_pickle=True).item()
-        ecg = self.ecg_modality(opened_npy["ecg"])
+        text = instance["text"]
 
-    def convert(self,):
+        opened_npy = np.load(instance["ecg_path"], allow_pickle=True).item()
+        ecg_signal = opened_npy["ecg"]
+        prepared_ecg_input = self.prepare_ecg(ecg_signal)
+
+
+    def prepare_ecg(self,):
         pass
 
     def normalize(self, ecg_signal: np.ndarray) -> Tuple[np.ndarray, Tuple[float, float]]:
-        min_vals = np.min(ecg_signal)
-        max_vals = np.max(ecg_signal)
-        normalized = (ecg_signal - min_vals) / (max_vals - min_vals + self.args.norm_eps)
+        min_vals, max_vals = np.min(ecg_signal), np.max(ecg_signal)
+        normalized = (ecg_signal - min_vals) / (max_vals - min_vals + self.norm_eps)
         clipped_normalized = np.clip(normalized, 0, 1)
         return clipped_normalized, (min_vals, max_vals)
 
-    def blackout_ecg(self):
+    ### Perturbations
+    def blackout_ecg(self, ecg_shape):
         c = np.random.choice(np.arange(10))
-        return np.full((len(self.args.leads), self.args.segment_len), c)
+        return np.full(ecg_shape, c)
 
-    def gauss_noise_ecg(self):
-        return np.random.randn(len(self.args.leads), self.args.segment_len)
+    def gauss_noise_ecg(self, ecg_shape):
+        return np.random.randn(ecg_shape)
 
+    ### Augmentations
     def augment_ecg(self, signal):
         if random.random() < 0.5:
             noise_level = 0.05
