@@ -1,6 +1,5 @@
 """Group rollout: per-prompt, sample G trajectories, score, build tensors for policy-loss computation."""
 import torch
-from transformers import TopPLogitsWarper
 
 from configs.constants import HF_LLMS
 from rl.rewards import reward_components
@@ -52,7 +51,7 @@ def _expand_enc(enc_out: dict, idx: int, G: int) -> dict:
     return out
 
 
-def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int, temperature: float, top_p: float) -> torch.Tensor:
+def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int, temperature: float) -> torch.Tensor:
     was_training = model.training
     model.eval()
     try:
@@ -62,8 +61,6 @@ def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int, temperatu
         model.train(was_training)
     targets = ids[:, pL:]
     logits = out.logits[:, pL - 1:-1, :] / temperature
-    if top_p < 1.0:
-        logits = TopPLogitsWarper(top_p)(targets.flatten()[:, None], logits.flatten(0, 1)).view_as(logits)
     return torch.log_softmax(logits.float(), dim=-1).gather(-1, targets.unsqueeze(-1)).squeeze(-1)
 
 
@@ -126,7 +123,7 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
         with torch.no_grad():
             old_lp = _log_prob_at_response(base, full_ids, full_attn,
                                            pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL,
-                                           args.rl_temperature, args.rl_top_p)
+                                           args.rl_temperature)
     finally:
         if was_training:
             base.train()
@@ -137,11 +134,11 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
         "resp_mask": resp_mask, "advantages": adv, "old_log_prob": old_lp, "pL": pL,
         "mean_reward": rewards.mean().item(), "degenerate": degenerate,
         "mean_reward_components": {k: sum(parts[k] for parts in reward_parts) / G for k in reward_parts[0]},
-        "temperature": args.rl_temperature, "top_p": args.rl_top_p,
+        "temperature": args.rl_temperature,
     }
 
 
 def current_log_prob(model, ro: dict) -> torch.Tensor:
     """Log-prob of rollout under the current (post-update) policy (keeps DDP graph)."""
     return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["sig_idx"], ro["enc_out"],
-                                 ro["pL"], ro["temperature"], ro["top_p"])
+                                 ro["pL"], ro["temperature"])

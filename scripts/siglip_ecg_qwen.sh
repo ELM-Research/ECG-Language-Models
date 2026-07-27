@@ -100,7 +100,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --num_workers 16 \
   --elm_ckpt src/runs/mlp_llava_qwen3.5-2b-base_siglip-ecg/pretrain-stage2/0/checkpoints/epoch_best.pt
 
-
+### RESTSRT HERE QWEN 2.5 to 3.5 correction
 uv run torchrun --standalone --nproc_per_node=$NPROC \
     src/main_trainer.py \
     "${COMMON_FLAGS[@]}" \
