@@ -5,7 +5,7 @@ from torch.utils.data.distributed import DistributedSampler
 from transformers import AutoTokenizer
 from datasets import load_dataset
 from elm.utils.parallelism import get_rank, get_world_size, is_main
-from elm.utils.constants import SIGNAL_TOKEN_PLACEHOLDER, RL_TOKENS, ECG_BYTE_PREFIX
+from elm.utils.constants import SIGNAL_TOKEN_PLACEHOLDER, RL_TOKENS
 
 class BuildDataloader:
     def __init__(self, data_names: list,
@@ -66,27 +66,13 @@ class BuildDataloader:
         if is_main():
             print(f"Length of Dataset: {len(data)}")
             print(f"Using {self.modality} modality")
-        encoder_tokenizer_components = self.build_encoder_tokenizer()
         llm_tokenizer_components = self.build_llm_tokenizer()
-        return self.build_data_modality(data, llm_tokenizer_components,
-                                                       encoder_tokenizer_components)
+        return self.build_data_modality(data, llm_tokenizer_components,)
 
-    def build_data_modality(self, data, llm_tokenizer_components,
-                                  encoder_tokenizer_components):
+    def build_data_modality(self, data, llm_tokenizer_components,):
         if self.modality == "signal":
             from elm.data.modality.signal import Signal
             return Signal(data, llm_tokenizer_components, self.args)
-        elif self.modality == "symbolic":
-            from elm.data.modality.ecg_byte import ECGByte
-            return ECGByte(data, llm_tokenizer_components, self.args)
-        elif self.modality == "stacked_signal":
-            from elm.data.modality.stacked_signal import StackedSignal
-            return StackedSignal(data, llm_tokenizer_components,
-                                 encoder_tokenizer_components, self.args)
-        elif self.modality == "rgb":
-            from elm.data.modality.rgb import RGB
-            return RGB(data, llm_tokenizer_components,
-                       encoder_tokenizer_components, self.args)
 
         raise ValueError(f"Unknown data modality: {self.modality}")
 
@@ -116,11 +102,6 @@ class BuildDataloader:
                     out.append(t)
             batch["text"] = out
         return batch
-
-    def build_encoder_tokenizer(
-        self,
-    ):
-        return {"encoder_tokenizer": None}
 
     def build_llm_tokenizer(
         self,
@@ -154,16 +135,6 @@ class BuildDataloader:
             print("After Modification\n")
             self.print_llm_tokenizer_info(llm_tokenizer)
         return out
-
-    def build_ecg_byte(
-        self,
-    ):
-        from dataloaders.data_modality.bpe.ecg_byte import BuildECGByte
-        ecg_byte_builder = BuildECGByte(self.args)
-        new_vocab = [f"{ECG_BYTE_PREFIX}{ids!s}" for ids in list(ecg_byte_builder.vocab.keys())]
-        if self.args.dev and is_main():
-            print("Length of new tokens", len(new_vocab))
-        return new_vocab, ecg_byte_builder
 
     ### DEV FUNCTIONS ###
     def print_llm_tokenizer_info(self, llm_tokenizer):
