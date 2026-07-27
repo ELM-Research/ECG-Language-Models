@@ -42,7 +42,10 @@ def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None
         if (step + 1) % accum_steps == 0 or (step + 1) == total_steps_per_epoch:
             gbs = len(rollouts) * args.rl_group_size * dp_size
             last_metrics = {}
-            for _ in range(updates):
+            has_signal = torch.tensor(any(not ro["degenerate"] for ro in rollouts), device=device, dtype=torch.int)
+            if dp_size > 1:
+                torch.distributed.all_reduce(has_signal, op = torch.distributed.ReduceOp.MAX)
+            for _ in range(updates * has_signal.item()):
                 update_loss = 0.0
                 for ro in rollouts:
                     log_prob = current_log_prob(nn, ro)
