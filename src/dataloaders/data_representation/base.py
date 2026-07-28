@@ -151,14 +151,16 @@ class Base(Dataset):
             labels[-1] = input_ids[-1]
         return labels
 
-    def create_attention_mask(self, truncated_padded_input: list[int]) -> list[int]:
+    def create_attention_mask(self, input_ids: list[int]) -> list[int]:
         bos_token = next(iter(HF_LLMS[self.args.llm]["watch_tokens"]["bos_token"]))
-        start_idx = truncated_padded_input.index(bos_token)
-        return [0] * start_idx + [1] * (len(truncated_padded_input) - start_idx)
+        start_idx = input_ids.index(bos_token)
+        return [0] * start_idx + [1] * (len(input_ids) - start_idx)
 
-    def pad_input(self, tokens: list) -> list:
-        padding_len = self.args.llm_input_len - len(tokens)
-        return [self.llm_tokenizer.pad_token_id] * padding_len + tokens  # left side padding
+    def prepare_input_ids(self, prompt: str) -> list[int]:
+        tokens = self.llm_tokenizer.encode(prompt, add_special_tokens=False)
+        if "train" in self.args.mode and len(tokens) > self.args.llm_input_len:
+            return self.truncate_input_preserving_signal_tokens(tokens)
+        return tokens
 
     def make_prompt(
         self,
@@ -277,12 +279,12 @@ class Base(Dataset):
         return signal
 
     ### DEBUGGING FUNCTIONS ###
-    def decode_and_print_mapping(self, truncated_padded_input: list[int]) -> None:
-        tokens = self.llm_tokenizer.convert_ids_to_tokens(truncated_padded_input)
-        decoded = self.llm_tokenizer.decode(truncated_padded_input, skip_special_tokens=False)
+    def decode_and_print_mapping(self, input_ids: list[int]) -> None:
+        tokens = self.llm_tokenizer.convert_ids_to_tokens(input_ids)
+        decoded = self.llm_tokenizer.decode(input_ids, skip_special_tokens=False)
 
         print("=== ECG Token Mapping ===")
-        for tid, tok in zip(truncated_padded_input, tokens):
+        for tid, tok in zip(input_ids, tokens):
             print(f"ID {tid:<6} | Token {tok}")
 
         print("\n=== Full Decoded String ===")
@@ -300,10 +302,10 @@ class Base(Dataset):
             print("No valid labels found (all are -100)")
         print("=" * 100)
 
-    def check_attention_mask(self, truncated_padded_input: list[int], attention_mask: list[int]) -> None:
-        tokens = self.llm_tokenizer.convert_ids_to_tokens(truncated_padded_input)
+    def check_attention_mask(self, input_ids: list[int], attention_mask: list[int]) -> None:
+        tokens = self.llm_tokenizer.convert_ids_to_tokens(input_ids)
         print("=== Attention Mask Debug ===")
-        for i, (tid, tok, mask) in enumerate(zip(truncated_padded_input, tokens, attention_mask)):
+        for i, (tid, tok, mask) in enumerate(zip(input_ids, tokens, attention_mask)):
             flag = "✓" if mask == 1 else "·"
             print(f"{i:03}: {tid:<6} | {tok:<20} | mask={mask} {flag}")
         print("=" * 100)

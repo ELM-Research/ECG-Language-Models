@@ -2,6 +2,7 @@ import torch
 from tqdm import tqdm
 import wandb
 
+from dataloaders.collate import left_pad_elm
 from utils.gpu_manager import is_main, train_dev_break, batch_to_device
 
 def run_train(
@@ -32,8 +33,12 @@ def run_train(
 
     optimizer.zero_grad()
     accum_loss_for_log = 0.0
+    full_len_steps = min(accum_steps + 1, total_steps_per_epoch) if epoch == 0 else 0
+    pad_id = dataloader.dataset.llm_tokenizer.pad_token_id
 
     for step, batch in enumerate(progress):
+        if step < full_len_steps:
+            batch = left_pad_elm(batch, args.llm_input_len, pad_id)
         batch = {k: batch_to_device(v, device) for k, v in batch.items()}
 
         out = nn(**batch)
