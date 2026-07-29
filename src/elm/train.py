@@ -25,6 +25,7 @@ if __name__ == "__main__":
             if config["wandb"]: setup_wandb(config)
 
         set_seed(config["seed"])
+        dataloader_builder = BuildDataloader(config["data"])
 
         
 

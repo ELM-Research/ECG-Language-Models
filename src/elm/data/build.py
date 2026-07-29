@@ -10,7 +10,6 @@ from elm.utils.constants import SIGNAL_TOKEN_PLACEHOLDER, RL_TOKENS
 
 class BuildDataloader:
     def __init__(self, data_names: list,
-                 data_subset: float,
                  llm_tokenizer: str,
                  modality: str,
                  batch_size: int,
@@ -21,7 +20,6 @@ class BuildDataloader:
                  perturbation: Literal["blackout", "gaussian"] | None = None):
         self.llm_tokenizer = llm_tokenizer
         self.data_names = data_names
-        self.data_subset = data_subset
         self.modality = modality
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -69,9 +67,7 @@ class BuildDataloader:
         for data_name in self.data_names:
             dataset = self.build_hf_dataset(data_name)
             data.extend(dataset)
-        if is_main():
-            print(f"Length of Dataset: {len(data)}")
-            print(f"Using {self.modality} modality")
+        if is_main(): print(f"Length of Dataset: {len(data)}", f"Using {self.modality} modality")
         llm_tokenizer_components = self.build_llm_tokenizer()
         text_preparer = Text(llm_tokenizer_components)
         ecg_modality_preparer = self.build_ecg_modality()
@@ -92,9 +88,6 @@ class BuildDataloader:
                 f"ELM-Research/{data_name}",
                 split=f"fold{self.args.fold}_train" if self.training_stage else f"fold{self.args.fold}_test",
             ).with_transform(self.decode_batch)
-        if self.data_subset:
-            n = int(len(data) * self.data_subset)
-            data = data.shuffle(seed=self.seed).select(range(n))
         if is_main():
             print("Length of Dataset Considered:", len(data))
         return data
