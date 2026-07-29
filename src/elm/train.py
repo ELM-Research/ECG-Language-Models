@@ -25,9 +25,13 @@ if __name__ == "__main__":
             if config["wandb"]: setup_wandb(config)
 
         set_seed(config["seed"])
-        dataloader_builder = BuildDataloader(config["data"])
-
-        
+        dataloader_builder = BuildDataloader(config["data"]["data_names"],
+                                             config["data"]["split_names"],
+                                             config["model"]["llm_tokenizer_name"],
+                                             config["modality"], config["training"]["batch_size"],
+                                             config["training"]["num_workers"], config["seed"],
+                                             training_stage=config["training"]["training_stage"])
+        dataloader = dataloader_builder.build_dataloader()
 
     finally:
         if config["wandb"] and is_main(): cleanup_wandb()

@@ -10,7 +10,8 @@ from elm.utils.constants import SIGNAL_TOKEN_PLACEHOLDER, RL_TOKENS
 
 class BuildDataloader:
     def __init__(self, data_names: list,
-                 llm_tokenizer: str,
+                 split_names: list,
+                 llm_tokenizer_name: str,
                  modality: str,
                  batch_size: int,
                  num_workers: int,
@@ -18,8 +19,9 @@ class BuildDataloader:
                  training_stage: Literal["pretrain", "sft", "rl"] | None = None,
                  augmentation: bool = False,
                  perturbation: Literal["blackout", "gaussian"] | None = None):
-        self.llm_tokenizer = llm_tokenizer
+        self.llm_tokenizer_name = llm_tokenizer_name
         self.data_names = data_names
+        self.split_names = split_names
         self.modality = modality
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -64,8 +66,8 @@ class BuildDataloader:
         from elm.data.modality.elm_dataset import ELMDataset
         from elm.data.modality.text import Text
         data = []
-        for data_name in self.data_names:
-            dataset = self.build_hf_dataset(data_name)
+        for data_name, split_name in zip(self.data_names, self.split_names):
+            dataset = self.build_hf_dataset(data_name, split_name)
             data.extend(dataset)
         if is_main(): print(f"Length of Dataset: {len(data)}", f"Using {self.modality} modality")
         llm_tokenizer_components = self.build_llm_tokenizer()
@@ -83,13 +85,9 @@ class BuildDataloader:
 
         raise ValueError(f"Unknown data modality: {self.modality}")
 
-    def build_hf_dataset(self, data_name):
-        data = load_dataset(
-                f"ELM-Research/{data_name}",
-                split=f"fold{self.args.fold}_train" if self.training_stage else f"fold{self.args.fold}_test",
-            ).with_transform(self.decode_batch)
-        if is_main():
-            print("Length of Dataset Considered:", len(data))
+    def build_hf_dataset(self, data_name, split_name):
+        data = load_dataset(data_name, split=split_name).with_transform(self.decode_batch)
+        if is_main(): print("Length of Dataset Considered:", len(data))
         return data
 
     def decode_batch(self, batch: dict) -> dict:
@@ -106,7 +104,7 @@ class BuildDataloader:
     def build_llm_tokenizer(
         self,
     ):
-        llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_tokenizer)
+        llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_tokenizer_name)
         return self.modify_llm_tokenizer(llm_tokenizer)
 
     def modify_llm_tokenizer(self, llm_tokenizer):

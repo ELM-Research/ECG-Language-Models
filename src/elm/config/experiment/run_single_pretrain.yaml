@@ -2,19 +2,21 @@ defaults:
   - ../common.yaml
 
 training:
-  optimizer: muon
+  optimizer_name: muon
   training_stage: pretrain
+  batch_size: 2
+  num_workers: 2
 
 gpu:
   distributed: False
 
 model:
   
-  llm: qwen3.5-0.8b-base
-  llm_tokenizer: qwen3.5-0.8b-base
+  llm_name: qwen3.5-0.8b-base
+  llm_tokenizer_name: qwen3.5-0.8b-base
   
-  encoder: siglip-ecg
-  encoder_tokenizer: null
+  encoder_name: siglep
+  encoder_tokenizer_name: null
 
 data:
   data_names: # yaml list
@@ -25,8 +27,3 @@ data:
     - fold1_train
 
   data_subset: null
-
-  modality: signal
-
-  batch_size: 2
-  num_workers: 2

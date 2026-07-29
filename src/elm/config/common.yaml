@@ -27,3 +27,6 @@ augment_ecg: true
 
 # Perturbation
 perturbation: null
+
+# Modality
+modality: signal

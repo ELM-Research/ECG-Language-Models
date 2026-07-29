@@ -2,7 +2,7 @@ import random
 import numpy as np
 from typing import Tuple, Literal
 
-class Base:
+class ELMDataset:
     def __init__(self, data,
                  ecg_modality_preparer,
                  text_preparer,

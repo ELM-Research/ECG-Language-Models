@@ -4,6 +4,8 @@ defaults:
 training:
   optimizer: muon
   training_stage: pretrain
+  batch_size: 2
+  num_workers: 2
 
 gpu:
   distributed: True
@@ -25,8 +27,3 @@ data:
     - fold1_train
 
   data_subset: null
-
-  modality: signal
-
-  batch_size: 2
-  num_workers: 2
