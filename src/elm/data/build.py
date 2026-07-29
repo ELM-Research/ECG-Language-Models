@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AutoTokenizer
 from datasets import load_dataset
+from typing import Literal
 from elm.utils.parallelism import get_rank, get_world_size, is_main
 from elm.utils.constants import SIGNAL_TOKEN_PLACEHOLDER, RL_TOKENS
 
@@ -15,7 +16,9 @@ class BuildDataloader:
                  batch_size: int,
                  num_workers: int,
                  seed: int,
-                 training: bool,):
+                 training: bool,
+                 augmentation: bool = False,
+                 perturbation: Literal["blackout", "gaussian"] | None = None):
         self.llm_tokenizer = llm_tokenizer
         self.data_names = data_names
         self.data_subset = data_subset
@@ -24,6 +27,8 @@ class BuildDataloader:
         self.num_workers = num_workers
         self.seed = seed
         self.training = training
+        self.augmentation = augmentation
+        self.perturbation = perturbation
 
     ### TORCH DATALOADER
     def build_dataloader(self,):
@@ -59,6 +64,8 @@ class BuildDataloader:
 
     ### TORCH DATASET
     def build_torch_dataset(self, ):
+        from elm.data.modality.base import Base
+        from elm.data.modality.text import Text
         data = []
         for data_name in self.data_names:
             dataset = self.build_hf_dataset(data_name)
@@ -67,12 +74,17 @@ class BuildDataloader:
             print(f"Length of Dataset: {len(data)}")
             print(f"Using {self.modality} modality")
         llm_tokenizer_components = self.build_llm_tokenizer()
-        return self.build_data_modality(data, llm_tokenizer_components,)
+        text_preparer = Text(llm_tokenizer_components)
+        ecg_modality = self.build_ecg_modality()
+        torch_dataset = Base(data, ecg_modality, text_preparer,
+                             augmentation = self.augmentation,
+                             perturbation = self.perturbation)
+        return 
 
-    def build_data_modality(self, data, llm_tokenizer_components,):
+    def build_ecg_modality(self,):
         if self.modality == "signal":
             from elm.data.modality.signal import Signal
-            return Signal(data, llm_tokenizer_components, self.args)
+            return {"signal" : Signal()}
 
         raise ValueError(f"Unknown data modality: {self.modality}")
 

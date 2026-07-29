@@ -21,3 +21,9 @@ leads:
 
 # ECG time length in Sampling Rate (250 Hz) * Seconds (10 sec)
 segment_length: 2500
+
+# Augmentation
+augment_ecg: true
+
+# Perturbation
+perturbation: null
