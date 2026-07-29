@@ -75,8 +75,8 @@ class BuildDataloader:
             print(f"Using {self.modality} modality")
         llm_tokenizer_components = self.build_llm_tokenizer()
         text_preparer = Text(llm_tokenizer_components)
-        ecg_modality = self.build_ecg_modality()
-        torch_dataset = Base(data, ecg_modality, text_preparer,
+        ecg_modality_preparer = self.build_ecg_modality()
+        torch_dataset = Base(data, ecg_modality_preparer, text_preparer,
                              augmentation = self.augmentation,
                              perturbation = self.perturbation)
         return torch_dataset
@@ -84,7 +84,7 @@ class BuildDataloader:
     def build_ecg_modality(self,):
         if self.modality == "signal":
             from elm.data.modality.signal import Signal
-            return {"signal" : Signal()}
+            return Signal()
 
         raise ValueError(f"Unknown data modality: {self.modality}")
 

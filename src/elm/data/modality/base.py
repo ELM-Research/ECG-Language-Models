@@ -4,14 +4,13 @@ from typing import Tuple, Literal
 
 class Base:
     def __init__(self, data,
-                 ecg_modality,
+                 ecg_modality_preparer,
                  text_preparer,
                  norm_eps: float = 1e-6,
                  augmentation: bool = False,
                  perturbation: Literal["blackout", "gaussian"] | None = None):
         self.data = data
-        self.ecg_modality = ecg_modality
-        self.modality_preparer = ecg_modality
+        self.ecg_modality_preparer = ecg_modality_preparer
         self.text_preparer = text_preparer
         self.norm_eps = norm_eps
         self.augmentation = augmentation
@@ -36,7 +35,8 @@ class Base:
 
         if self.augmentation: ecg_input = self.augment_ecg(ecg_signal)
 
-        normalized_ecg_input = self.normalize_ecg(ecg_input)
+        if self.ecg_modality_preparer.__name__ not in ["RGB", "StackedSignal"]:
+            ecg_input = self.normalize_ecg(ecg_input)
 
     def normalize_ecg(self, ecg_signal: np.ndarray) -> Tuple[np.ndarray, Tuple[float, float]]:
         min_vals, max_vals = np.min(ecg_signal), np.max(ecg_signal)

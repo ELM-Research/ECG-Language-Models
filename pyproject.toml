@@ -55,13 +55,13 @@ build-backend = "setuptools.build_meta"
 ecg_byte = ["bpe==0.0.1"]
 
 [tool.uv.sources]
-bpe = { path = "src/elm/data/representations/bpe", editable = true }
+bpe = { path = "src/elm/data/modality/bpe", editable = true }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["elm", "elm.*"]
 exclude = [
-    "elm.data.representations.bpe.target",
-    "elm.data.representations.bpe.target.*",
+    "elm.data.modality.bpe.target",
+    "elm.data.modality.bpe.target.*",
 ]
 namespaces = true
