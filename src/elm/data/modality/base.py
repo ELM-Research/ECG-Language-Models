@@ -35,7 +35,7 @@ class Base:
 
         if self.augmentation: ecg_input = self.augment_ecg(ecg_signal)
 
-        if self.ecg_modality_preparer.__name__ not in ["RGB", "StackedSignal"]:
+        if type(self.ecg_modality_preparer).__name__ not in ["RGB", "StackedSignal"]:
             ecg_input = self.normalize_ecg(ecg_input)
 
     def normalize_ecg(self, ecg_signal: np.ndarray) -> Tuple[np.ndarray, Tuple[float, float]]:
@@ -52,8 +52,7 @@ class Base:
     ### Augmentations
     def augment_ecg(self, ecg_signal):
         if random.random() < 0.5:
-            noise_level = 0.05
-            noise = np.random.normal(0, noise_level * np.std(ecg_signal), ecg_signal.shape)
+            noise = np.random.normal(0, 0.05 * np.std(ecg_signal), ecg_signal.shape)
             perturbed_signal = ecg_signal + noise
 
             if random.random() < 0.5:

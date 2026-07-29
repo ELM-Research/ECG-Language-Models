@@ -6,5 +6,8 @@ c = Signal()
 v = {"l" : c}
 print(v)
 
-v["l"]("kl")
+# v["l"]("kl")
 
+if type(c).__name__ not in ["rgb", "s"]:
+    print(type(c).__name__)
+    print(type(type(c).__name__))
