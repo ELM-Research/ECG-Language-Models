@@ -27,6 +27,7 @@ class Base:
         opened_npy = np.load(instance["ecg_path"], allow_pickle=True).item()
         ecg_signal = opened_npy["ecg"]
         prepared_ecg_input = self.prepare_ecg(ecg_signal)
+        prepared_text_input = self.prepare_text(text)
 
 
     def prepare_ecg(self, ecg_signal):
@@ -37,6 +38,9 @@ class Base:
 
         if type(self.ecg_modality_preparer).__name__ not in ["RGB", "StackedSignal"]:
             ecg_input = self.normalize_ecg(ecg_input)
+
+    def prepare_text(self, text):
+        pass
 
     def normalize_ecg(self, ecg_signal: np.ndarray) -> Tuple[np.ndarray, Tuple[float, float]]:
         min_vals, max_vals = np.min(ecg_signal), np.max(ecg_signal)
