@@ -17,7 +17,7 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()
 
     try:
-        if not config["dev"] and is_main():
+        if not config["development"] and is_main():
             run_folder = setup_experiment_folder(
                 f'{RUNS_DIR}/{exp_name}',
                 config,)
@@ -30,7 +30,8 @@ if __name__ == "__main__":
                                              config["model"]["llm_tokenizer_name"],
                                              config["modality"], config["training"]["batch_size"],
                                              config["training"]["num_workers"], config["seed"],
-                                             training_stage=config["training"]["training_stage"])
+                                             training_stage=config["training"]["training_stage"],
+                                             development=config["development"])
         dataloader = dataloader_builder.build_dataloader()
 
     finally:

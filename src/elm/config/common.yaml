@@ -1,5 +1,5 @@
 seed: 0
-dev: false
+development: true
 wandb: false
 
 # Which leads to use

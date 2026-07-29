@@ -12,8 +12,8 @@ gpu:
 
 model:
   
-  llm_name: qwen3.5-0.8b-base
-  llm_tokenizer_name: qwen3.5-0.8b-base
+  llm_name: Qwen/Qwen3.5-0.8B-Base
+  llm_tokenizer_name: Qwen/Qwen3.5-0.8B-Base
   
   encoder_name: siglep
   encoder_tokenizer_name: null

@@ -18,7 +18,8 @@ class BuildDataloader:
                  seed: int,
                  training_stage: Literal["pretrain", "sft", "rl"] | None = None,
                  augmentation: bool = False,
-                 perturbation: Literal["blackout", "gaussian"] | None = None):
+                 perturbation: Literal["blackout", "gaussian"] | None = None,
+                 development: bool = False,):
         self.llm_tokenizer_name = llm_tokenizer_name
         self.data_names = data_names
         self.split_names = split_names
@@ -29,6 +30,7 @@ class BuildDataloader:
         self.training_stage = training_stage
         self.augmentation = augmentation
         self.perturbation = perturbation
+        self.development = development
 
     ### TORCH DATALOADER
     def build_dataloader(self,):
@@ -108,7 +110,7 @@ class BuildDataloader:
         return self.modify_llm_tokenizer(llm_tokenizer)
 
     def modify_llm_tokenizer(self, llm_tokenizer):
-        if self.args.dev and is_main():
+        if self.development and is_main():
             print("Before Modification\n")
             self.print_llm_tokenizer_info(llm_tokenizer)
 
@@ -117,22 +119,14 @@ class BuildDataloader:
 
         tokens_to_add = {"additional_special_tokens": [],}
         tokens_to_add["additional_special_tokens"].append(SIGNAL_TOKEN_PLACEHOLDER)
-        if self.args.train_phase in ["sft", "rl"]:
+        if self.training_stage in ["sft", "rl"]:
             vocab = llm_tokenizer.get_vocab()
             tokens_to_add["additional_special_tokens"].extend(t for t in RL_TOKENS if t not in vocab)
         llm_tokenizer.add_special_tokens(tokens_to_add)
-
-        if self.modality == "ecg_byte":
-            new_vocab, ecg_byte_builder = self.build_ecg_byte()
-            llm_tokenizer.add_tokens(new_vocab)
-            out = {"llm_tokenizer": llm_tokenizer, "ecg_tokenizer": ecg_byte_builder}
-        else:
-            out = {"llm_tokenizer": llm_tokenizer}
-
-        if self.args.dev and is_main():
+        if self.development and is_main():
             print("After Modification\n")
             self.print_llm_tokenizer_info(llm_tokenizer)
-        return out
+        return {"llm_tokenizer": llm_tokenizer}
 
     ### DEV FUNCTIONS ###
     def print_llm_tokenizer_info(self, llm_tokenizer):
