@@ -9,10 +9,8 @@ def _mapping_structure(x):
 def left_pad_elm(x: dict, target_len: int, pad_id: int) -> dict:
     """Left-pad ELM sequence tensors along their last dimension."""
     pad_len = target_len - x["elm_input_ids"].shape[-1]
-    if pad_len < 0:
-        raise ValueError(f"ELM sequence exceeds target length {target_len}")
-    if pad_len == 0:
-        return x
+    if pad_len < 0: raise ValueError(f"ELM sequence exceeds target length {target_len}")
+    if pad_len == 0: return x
 
     x = dict(x)
     for key, value in (("elm_input_ids", pad_id), ("elm_attention_mask", 0), ("elm_labels", -100)):
@@ -26,8 +24,8 @@ def left_pad_elm(x: dict, target_len: int, pad_id: int) -> dict:
 
 def collate_elm(batch: list[dict], pad_id: int) -> dict | None:
     batch = [item for item in batch if item is not None]
-    if not batch:
-        return None
+    if not batch: return None
+
     structure = _mapping_structure(batch[0])
     if any(_mapping_structure(item) != structure for item in batch[1:]):
         raise ValueError("Batch items have different mapping structures")

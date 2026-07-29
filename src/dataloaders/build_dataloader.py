@@ -55,8 +55,7 @@ class BuildDataLoader:
         if self.args.distributed:
             return DistributedSampler(torch_dataset, num_replicas=get_world_size(),
                                          rank=get_rank(), seed=self.args.seed, shuffle=True)
-        else:
-            return None
+        return None
 
     def collate_fn(self, batch):
         return collate_elm(batch, self.pad_id)
