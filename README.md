@@ -30,6 +30,13 @@ For BPE symbolic representation with [ECG-Byte](https://arxiv.org/abs/2412.14373
 uv sync --extra ecg_byte
 ```
 
+currently get 
+
+bash-4.4$ uv sync
+Using CPython 3.11.14
+Creating virtual environment at: .venv
+error: Distribution not found at: file:///p01/whan/refactor/ECG-Language-Models/src/elm/data/representations/bpe
+
 If Rust is not installed run `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain=1.82.0 -y`, open a new terminal to set the PATH, and rerun the above commands.
 
 ## ECG Datasets <a name="data"></a>

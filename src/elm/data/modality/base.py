@@ -11,6 +11,7 @@ class Base:
                  perturbation: Literal["blackout", "gaussian"] | None = None):
         self.data = data
         self.ecg_modality = ecg_modality
+        self.modality_preparer = ecg_modality
         self.text_preparer = text_preparer
         self.norm_eps = norm_eps
         self.augmentation = augmentation

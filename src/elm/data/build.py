@@ -79,7 +79,7 @@ class BuildDataloader:
         torch_dataset = Base(data, ecg_modality, text_preparer,
                              augmentation = self.augmentation,
                              perturbation = self.perturbation)
-        return 
+        return torch_dataset
 
     def build_ecg_modality(self,):
         if self.modality == "signal":
