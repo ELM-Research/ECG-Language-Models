@@ -3,6 +3,7 @@ defaults:
 
 training:
   optimizer: muon
+  training_stage: pretrain
 
 gpu:
   distributed: True

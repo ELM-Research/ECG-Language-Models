@@ -16,7 +16,7 @@ class BuildDataloader:
                  batch_size: int,
                  num_workers: int,
                  seed: int,
-                 training: bool,
+                 training_stage: Literal["pretrain", "sft", "rl"] | None = None,
                  augmentation: bool = False,
                  perturbation: Literal["blackout", "gaussian"] | None = None):
         self.llm_tokenizer = llm_tokenizer
@@ -26,7 +26,7 @@ class BuildDataloader:
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.seed = seed
-        self.training = training
+        self.training_stage = training_stage
         self.augmentation = augmentation
         self.perturbation = perturbation
 
@@ -39,15 +39,14 @@ class BuildDataloader:
         sampler = self.get_torch_dataloader_sampler(torch_dataset)
         return DataLoader(
             torch_dataset,
-            batch_size = self.batch_size if self.training else 1,
-            shuffle = (sampler is None) if self.training else False,
-            num_workers = self.num_workers if self.training else 0,
+            batch_size = self.batch_size if self.training_stage else 1,
+            shuffle = (sampler is None) if self.training_stage else False,
+            num_workers = self.num_workers if self.training_stage else 0,
             sampler=sampler,
             pin_memory=torch.cuda.is_available(),
             collate_fn = self.collate_fn,
             persistent_workers=(self.num_workers > 0),
             prefetch_factor=4 if self.num_workers > 0 else None,
-
         )
 
     def get_torch_dataloader_sampler(self, torch_dataset,):
@@ -64,7 +63,7 @@ class BuildDataloader:
 
     ### TORCH DATASET
     def build_torch_dataset(self, ):
-        from elm.data.modality.base import Base
+        from elm.data.modality.elm_dataset import ELMDataset
         from elm.data.modality.text import Text
         data = []
         for data_name in self.data_names:
@@ -76,7 +75,7 @@ class BuildDataloader:
         llm_tokenizer_components = self.build_llm_tokenizer()
         text_preparer = Text(llm_tokenizer_components)
         ecg_modality_preparer = self.build_ecg_modality()
-        torch_dataset = Base(data, ecg_modality_preparer, text_preparer,
+        torch_dataset = ELMDataset(data, ecg_modality_preparer, text_preparer,
                              augmentation = self.augmentation,
                              perturbation = self.perturbation)
         return torch_dataset
@@ -89,13 +88,9 @@ class BuildDataloader:
         raise ValueError(f"Unknown data modality: {self.modality}")
 
     def build_hf_dataset(self, data_name):
-        if self.args.mode in ["train", "post_train"]:
-            split_name = f"fold{self.args.fold}_train"
-        elif self.args.mode in ["eval", "inference"]:
-            split_name = f"fold{self.args.fold}_test"
         data = load_dataset(
                 f"ELM-Research/{data_name}",
-                split=split_name,
+                split=f"fold{self.args.fold}_train" if self.training_stage else f"fold{self.args.fold}_test",
             ).with_transform(self.decode_batch)
         if self.data_subset:
             n = int(len(data) * self.data_subset)
