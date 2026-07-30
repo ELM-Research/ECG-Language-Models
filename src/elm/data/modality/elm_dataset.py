@@ -24,8 +24,8 @@ class ELMDataset:
         instance = self.data[index]
         ecg_path = instance["ecg_path"] if "heed" in instance["ecg_path"] else f'../{instance["ecg_path"]}'
         opened_npy = np.load(ecg_path, allow_pickle=True).item()
-        prepared_ecg_input = self.prepare_ecg(opened_npy["ecg"])
-        prepared_text_input = self.prepare_text(instance["text"])
+        prepared_ecg_input, ecg_token_placeholders = self.prepare_ecg(opened_npy["ecg"])
+        prepared_text_input = self.prepare_text(instance["text"], ecg_token_placeholders)
         return {**prepared_ecg_input, **prepared_text_input}
 
     def prepare_ecg(self, ecg_signal):
@@ -39,8 +39,8 @@ class ELMDataset:
 
         return self.ecg_modality_preparer(ecg_signal)
 
-    def prepare_text(self, text):
-        return self.text_preparer(text)
+    def prepare_text(self, text, ecg_token_placeholders):
+        return self.text_preparer(text, ecg_token_placeholders)
 
     def normalize_ecg(self, ecg_signal: np.ndarray) -> Tuple[np.ndarray, Tuple[float, float]]:
         min_vals, max_vals = np.min(ecg_signal), np.max(ecg_signal)

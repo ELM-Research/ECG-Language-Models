@@ -5,14 +5,16 @@ from elm.config.load import get_config
 
 
 if __name__ == "__main__":
-    config, exp_name = get_config()
+    config, _ = get_config()
+    print(config)
 
     gc.collect()
     torch.cuda.empty_cache()
 
     dataloader_builder = BuildDataloader(config["data"]["data_names"],
                                             config["data"]["split_names"],
-                                            config["model"]["llm_tokenizer_name"],
+                                            config["model"]["llm"]["llm_tokenizer_name"],
+                                            config["model"]["ecg_tokens"],
                                             config["modality"], config["training"]["batch_size"],
                                             config["training"]["num_workers"], config["seed"],
                                             training_stage=config["training"]["training_stage"],

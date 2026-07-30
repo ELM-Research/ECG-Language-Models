@@ -2,16 +2,18 @@ import json
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
+from functools import partial
 from transformers import AutoTokenizer
 from datasets import load_dataset
 from typing import Literal
 from elm.utils.parallelism import get_rank, get_world_size, is_main
-from elm.utils.constants import SIGNAL_TOKEN_PLACEHOLDER, RL_TOKENS
+from elm.utils.constants import ECG_TOKEN_PLACEHOLDER, RL_TOKENS
 
 class BuildDataloader:
     def __init__(self, data_names: list,
                  split_names: list,
                  llm_tokenizer_name: str,
+                 ecg_tokens,
                  modality: str,
                  batch_size: int,
                  num_workers: int,
@@ -20,9 +22,10 @@ class BuildDataloader:
                  augmentation: bool = False,
                  perturbation: Literal["blackout", "gaussian"] | None = None,
                  development: bool = False,):
-        self.llm_tokenizer_name = llm_tokenizer_name
         self.data_names = data_names
         self.split_names = split_names
+        self.llm_tokenizer_name = llm_tokenizer_name
+        self.ecg_tokens = ecg_tokens
         self.modality = modality
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -46,7 +49,8 @@ class BuildDataloader:
             num_workers = self.num_workers if self.training_stage else 0,
             sampler=sampler,
             pin_memory=torch.cuda.is_available(),
-            collate_fn = self.collate_fn,
+            collate_fn = partial(self.custom_collate_fn,
+                                 self.pad_token_id),
             persistent_workers=(self.num_workers > 0),
             prefetch_factor=4 if self.num_workers > 0 else None,
         )
@@ -57,7 +61,8 @@ class BuildDataloader:
                                       rank=get_rank(), seed=self.seed, shuffle=True)
         return None
 
-    def collate_fn(self, batch):
+
+    def custom_collate_fn(self, batch, pad_token_id):
         batch = [item for item in batch if item is not None]
         if len(batch) == 0:
             return None
@@ -73,6 +78,7 @@ class BuildDataloader:
             data.extend(dataset)
         if is_main(): print(f"Length of Dataset: {len(data)}", f"Using {self.modality} modality")
         llm_tokenizer = self.build_llm_tokenizer()
+        self.pad_token_id = llm_tokenizer.pad_token_id
         text_preparer = Text(llm_tokenizer, self.training_stage)
         ecg_modality_preparer = self.build_ecg_modality()
         torch_dataset = ELMDataset(data, ecg_modality_preparer, text_preparer,
@@ -83,7 +89,7 @@ class BuildDataloader:
     def build_ecg_modality(self,):
         if self.modality == "signal":
             from elm.data.modality.signal import Signal
-            return Signal()
+            return Signal(self.ecg_tokens)
 
         raise ValueError(f"Unknown data modality: {self.modality}")
 
@@ -114,15 +120,13 @@ class BuildDataloader:
             print("Before Modification\n")
             self.print_llm_tokenizer_info(llm_tokenizer)
 
-        if getattr(llm_tokenizer, "pad_token", None) is None:  # llama 3.2
-            llm_tokenizer.pad_token = llm_tokenizer.eos_token
-
-        tokens_to_add = {"additional_special_tokens": [],}
-        tokens_to_add["additional_special_tokens"].append(SIGNAL_TOKEN_PLACEHOLDER)
+        tokens_to_add = [ECG_TOKEN_PLACEHOLDER]
         if self.training_stage in ["sft", "rl"]:
             vocab = llm_tokenizer.get_vocab()
-            tokens_to_add["additional_special_tokens"].extend(t for t in RL_TOKENS if t not in vocab)
-        llm_tokenizer.add_special_tokens(tokens_to_add)
+            for key, value in RL_TOKENS.items():
+                if value not in vocab: tokens_to_add.append(RL_TOKENS)
+
+        llm_tokenizer.add_tokens(tokens_to_add)
         if self.development and is_main():
             print("After Modification\n")
             self.print_llm_tokenizer_info(llm_tokenizer)
