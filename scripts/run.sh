@@ -1,5 +1,8 @@
-uv run python3 -m elm.train \
+uv run python3 -m elm.test \
 --config src/elm/config/experiment/run_single_pretrain.yaml
+
+# uv run python3 -m elm.train \
+# --config src/elm/config/experiment/run_single_pretrain.yaml
 
 
 # uv run torchrun \

@@ -22,25 +22,25 @@ class ELMDataset:
 
     def __getitem__(self, index: int):
         instance = self.data[index]
-        text = instance["text"]
-
-        opened_npy = np.load(instance["ecg_path"], allow_pickle=True).item()
-        ecg_signal = opened_npy["ecg"]
-        prepared_ecg_input = self.prepare_ecg(ecg_signal)
-        prepared_text_input = self.prepare_text(text)
-
+        ecg_path = instance["ecg_path"] if "heed" in instance["ecg_path"] else f'../{instance["ecg_path"]}'
+        opened_npy = np.load(ecg_path, allow_pickle=True).item()
+        prepared_ecg_input = self.prepare_ecg(opened_npy["ecg"])
+        prepared_text_input = self.prepare_text(instance["text"])
+        return {**prepared_ecg_input, **prepared_text_input}
 
     def prepare_ecg(self, ecg_signal):
-        if self.perturbation == "blackout": ecg_input = self.blackout_ecg(ecg_signal.shape)
-        elif self.perturbation == "gaussian": ecg_input = self.gaussian_ecg(ecg_signal.shape)
+        if self.perturbation == "blackout": ecg_signal = self.blackout_ecg(ecg_signal.shape)
+        elif self.perturbation == "gaussian": ecg_signal = self.gaussian_ecg(ecg_signal.shape)
 
-        if self.augmentation: ecg_input = self.augment_ecg(ecg_signal)
+        if self.augmentation: ecg_signal = self.augment_ecg(ecg_signal)
 
         if type(self.ecg_modality_preparer).__name__ not in ["RGB", "StackedSignal"]:
-            ecg_input = self.normalize_ecg(ecg_input)
+            ecg_signal = self.normalize_ecg(ecg_signal)
+
+        return self.ecg_modality_preparer(ecg_signal)
 
     def prepare_text(self, text):
-        pass
+        return self.text_preparer(text)
 
     def normalize_ecg(self, ecg_signal: np.ndarray) -> Tuple[np.ndarray, Tuple[float, float]]:
         min_vals, max_vals = np.min(ecg_signal), np.max(ecg_signal)

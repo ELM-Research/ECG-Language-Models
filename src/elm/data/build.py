@@ -72,8 +72,8 @@ class BuildDataloader:
             dataset = self.build_hf_dataset(data_name, split_name)
             data.extend(dataset)
         if is_main(): print(f"Length of Dataset: {len(data)}", f"Using {self.modality} modality")
-        llm_tokenizer_components = self.build_llm_tokenizer()
-        text_preparer = Text(llm_tokenizer_components)
+        llm_tokenizer = self.build_llm_tokenizer()
+        text_preparer = Text(llm_tokenizer, self.training_stage)
         ecg_modality_preparer = self.build_ecg_modality()
         torch_dataset = ELMDataset(data, ecg_modality_preparer, text_preparer,
                              augmentation = self.augmentation,
@@ -126,7 +126,7 @@ class BuildDataloader:
         if self.development and is_main():
             print("After Modification\n")
             self.print_llm_tokenizer_info(llm_tokenizer)
-        return {"llm_tokenizer": llm_tokenizer}
+        return llm_tokenizer
 
     ### DEV FUNCTIONS ###
     def print_llm_tokenizer_info(self, llm_tokenizer):

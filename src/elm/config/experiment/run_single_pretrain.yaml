@@ -5,15 +5,16 @@ training:
   optimizer_name: muon
   training_stage: pretrain
   batch_size: 2
-  num_workers: 2
+  num_workers: 0
 
 gpu:
   distributed: False
 
 model:
-  
-  llm_name: Qwen/Qwen3.5-0.8B-Base
-  llm_tokenizer_name: Qwen/Qwen3.5-0.8B-Base
+  # llm_name: Qwen/Qwen3.5-0.8B
+  # llm_tokenizer_name: Qwen/Qwen3.5-0.8B
+  llm_name: Qwen/Qwen3-0.6B
+  llm_tokenizer_name: Qwen/Qwen3-0.6B
   
   encoder_name: siglep
   encoder_tokenizer_name: null
@@ -21,9 +22,8 @@ model:
 data:
   data_names: # yaml list
     - ELM-Research/pretrain-stage1
-    - ELM-Research/pretrain-stage2
+  
   split_names: # corresponding to data_names
-    - fold1_train
     - fold1_train
 
   data_subset: null
