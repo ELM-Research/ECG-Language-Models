@@ -2,7 +2,8 @@ import json
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from transformers import AutoTokenizer, DataCollatorWithPadding
+from transformers import AutoTokenizer, DataCollatorForLanguageModeling, \
+    DataCollatorForSeq2Seq
 from datasets import load_dataset
 from typing import Literal
 from elm.utils.parallelism import get_rank, get_world_size, is_main
@@ -20,7 +21,7 @@ class BuildDataloader:
                  seed: int,
                  training_stage: Literal["pretrain", "sft", "rl"] | None = None,
                  augmentation: bool = False,
-                 perturbation: Literal["blackout", "gaussian"] | None = None,
+                 perturbation: Literal["blackout", "gaussian", "only_text"] | None = None,
                  development: bool = False,):
         self.data_names = data_names
         self.split_names = split_names
@@ -51,7 +52,10 @@ class BuildDataloader:
             num_workers = self.num_workers if self.training_stage else 0,
             sampler=sampler,
             pin_memory=torch.cuda.is_available(),
-            collate_fn = DataCollatorWithPadding(llm_tokenizer),
+            collate_fn = DataCollatorForLanguageModeling(llm_tokenizer, mlm=False) \
+                if self.training_stage == "pretrain" \
+                else DataCollatorForSeq2Seq(llm_tokenizer,
+                                            label_pad_token_id=-100),
             persistent_workers=(self.num_workers > 0),
             prefetch_factor=4 if self.num_workers > 0 else None,
         )
@@ -83,7 +87,7 @@ class BuildDataloader:
     def build_ecg_modality(self,):
         if self.modality == "signal":
             from elm.data.modality.signal import Signal
-            return Signal(self.ecg_tokens)
+            return Signal(self.ecg_tokens, self.perturbation == "only_text")
 
         raise ValueError(f"Unknown data modality: {self.modality}")
 
@@ -117,8 +121,8 @@ class BuildDataloader:
         tokens_to_add = [ECG_TOKEN_PLACEHOLDER]
         if self.training_stage in ["sft", "rl"]:
             vocab = llm_tokenizer.get_vocab()
-            for key, value in RL_TOKENS.items():
-                if value not in vocab: tokens_to_add.append(RL_TOKENS)
+            for token in RL_TOKENS:
+                if token not in vocab: tokens_to_add.append(token)
 
         llm_tokenizer.add_tokens(tokens_to_add)
         if self.development and is_main():

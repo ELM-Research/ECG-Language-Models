@@ -26,13 +26,16 @@ if __name__ == "__main__":
 
         set_seed(config["seed"])
         dataloader_builder = BuildDataloader(config["data"]["data_names"],
-                                                config["data"]["split_names"],
-                                                config["model"]["llm"]["llm_tokenizer_name"],
-                                                config["model"]["ecg_tokens"],
-                                                config["modality"], config["training"]["batch_size"],
-                                                config["training"]["num_workers"], config["seed"],
-                                                training_stage=config["training"]["training_stage"],
-                                                development=config["development"])
+                                             config["data"]["split_names"],
+                                             config["model"]["llm"]["llm_tokenizer_name"],
+                                             config["model"]["llm"]["truncation_length"],
+                                             config["model"]["ecg_tokens"],
+                                             config["modality"], config["training"]["batch_size"],
+                                             config["training"]["num_workers"], config["seed"],
+                                             training_stage=config["training"]["training_stage"],
+                                             augmentation=config["augment_ecg"],
+                                             perturbation=config["perturbation"],
+                                             development=config["development"],)
         dataloader = dataloader_builder.build_dataloader()
 
     finally:

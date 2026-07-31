@@ -1,0 +1,38 @@
+defaults:
+  - ../common.yaml
+
+training:
+  optimizer_name: muon
+  training_stage: sft
+  batch_size: 2
+  num_workers: 0
+
+gpu:
+  distributed: False
+
+model:
+  llm:
+    llm_name: Qwen/Qwen3.5-0.8B-Base
+    llm_tokenizer_name: Qwen/Qwen3.5-0.8B-Base
+    truncation_length: 1024
+    # llm_name: Qwen/Qwen3.5-0.8B
+    # llm_tokenizer_name: Qwen/Qwen3.5-0.8B
+    # llm_name: Qwen/Qwen3-0.6B
+    # llm_tokenizer_name: Qwen/Qwen3-0.6B
+  
+  encoder:
+    encoder_name: siglep
+    encoder_tokenizer_name: null
+
+  ecg_tokens:
+    mode: static
+    num_ecg_tokens: 100
+
+data:
+  data_names: # yaml list
+    - ELM-Research/sft-stage1-noaug
+  
+  split_names: # corresponding to data_names
+    - fold1_train
+
+  data_subset: null

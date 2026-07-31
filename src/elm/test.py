@@ -19,10 +19,14 @@ if __name__ == "__main__":
                                             config["modality"], config["training"]["batch_size"],
                                             config["training"]["num_workers"], config["seed"],
                                             training_stage=config["training"]["training_stage"],
-                                            development=config["development"])
+                                            augmentation=config["augment_ecg"],
+                                            perturbation=config["perturbation"],
+                                            development=config["development"],)
     dataloader = dataloader_builder.build_dataloader()
     for batch in dataloader:
         print(batch["input_ids"].shape)
+        print(batch["labels"].shape)
+        print(batch["labels"])
         print(batch["ecg"].shape)
         print(dataloader.dataset.text_preparer.llm_tokenizer.decode(batch["input_ids"]))
         break
