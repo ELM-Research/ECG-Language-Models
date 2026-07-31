@@ -2,8 +2,7 @@ import json
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from functools import partial
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, DataCollatorWithPadding
 from datasets import load_dataset
 from typing import Literal
 from elm.utils.parallelism import get_rank, get_world_size, is_main
@@ -13,6 +12,7 @@ class BuildDataloader:
     def __init__(self, data_names: list,
                  split_names: list,
                  llm_tokenizer_name: str,
+                 truncation_length : int,
                  ecg_tokens,
                  modality: str,
                  batch_size: int,
@@ -25,6 +25,7 @@ class BuildDataloader:
         self.data_names = data_names
         self.split_names = split_names
         self.llm_tokenizer_name = llm_tokenizer_name
+        self.truncation_length = truncation_length
         self.ecg_tokens = ecg_tokens
         self.modality = modality
         self.batch_size = batch_size
@@ -37,10 +38,11 @@ class BuildDataloader:
 
     ### TORCH DATALOADER
     def build_dataloader(self,):
-        torch_dataset = self.build_torch_dataset()
-        return self.build_torch_dataloader(torch_dataset)
+        llm_tokenizer = self.build_llm_tokenizer()
+        torch_dataset = self.build_torch_dataset(llm_tokenizer)
+        return self.build_torch_dataloader(torch_dataset, llm_tokenizer)
 
-    def build_torch_dataloader(self, torch_dataset):
+    def build_torch_dataloader(self, torch_dataset, llm_tokenizer):
         sampler = self.get_torch_dataloader_sampler(torch_dataset)
         return DataLoader(
             torch_dataset,
@@ -49,8 +51,7 @@ class BuildDataloader:
             num_workers = self.num_workers if self.training_stage else 0,
             sampler=sampler,
             pin_memory=torch.cuda.is_available(),
-            collate_fn = partial(self.custom_collate_fn,
-                                 self.pad_token_id),
+            collate_fn = DataCollatorWithPadding(llm_tokenizer),
             persistent_workers=(self.num_workers > 0),
             prefetch_factor=4 if self.num_workers > 0 else None,
         )
@@ -61,15 +62,8 @@ class BuildDataloader:
                                       rank=get_rank(), seed=self.seed, shuffle=True)
         return None
 
-
-    def custom_collate_fn(self, batch, pad_token_id):
-        batch = [item for item in batch if item is not None]
-        if len(batch) == 0:
-            return None
-        return torch.utils.data.dataloader.default_collate(batch)
-
     ### TORCH DATASET
-    def build_torch_dataset(self, ):
+    def build_torch_dataset(self, llm_tokenizer):
         from elm.data.modality.elm_dataset import ELMDataset
         from elm.data.modality.text import Text
         data = []
@@ -77,9 +71,9 @@ class BuildDataloader:
             dataset = self.build_hf_dataset(data_name, split_name)
             data.extend(dataset)
         if is_main(): print(f"Length of Dataset: {len(data)}", f"Using {self.modality} modality")
-        llm_tokenizer = self.build_llm_tokenizer()
-        self.pad_token_id = llm_tokenizer.pad_token_id
-        text_preparer = Text(llm_tokenizer, self.training_stage)
+        text_preparer = Text(llm_tokenizer,
+                             self.truncation_length,
+                             self.training_stage)
         ecg_modality_preparer = self.build_ecg_modality()
         torch_dataset = ELMDataset(data, ecg_modality_preparer, text_preparer,
                              augmentation = self.augmentation,

@@ -14,6 +14,7 @@ if __name__ == "__main__":
     dataloader_builder = BuildDataloader(config["data"]["data_names"],
                                             config["data"]["split_names"],
                                             config["model"]["llm"]["llm_tokenizer_name"],
+                                            config["model"]["llm"]["truncation_length"],
                                             config["model"]["ecg_tokens"],
                                             config["modality"], config["training"]["batch_size"],
                                             config["training"]["num_workers"], config["seed"],
@@ -21,5 +22,7 @@ if __name__ == "__main__":
                                             development=config["development"])
     dataloader = dataloader_builder.build_dataloader()
     for batch in dataloader:
-        print(batch)
+        print(batch["input_ids"].shape)
+        print(batch["ecg"].shape)
+        print(dataloader.dataset.text_preparer.llm_tokenizer.decode(batch["input_ids"]))
         break
