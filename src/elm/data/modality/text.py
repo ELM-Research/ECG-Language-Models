@@ -43,6 +43,10 @@ class Text:
                                   max_length = self.truncation_length,)
 
     def prepare_sft(self, text, ecg_token_placeholders):
+        # Qwen3/3.5 always includes think start and end tokens
+        # Even when no thinking content present (content inside think start and end is empty)
+        # For our text that already has thinking and answer tags, apply_chat_template
+        # automatically allocates the thinking content appropriately.
         normalized_text = normalize_text(text)
         user = next((turn for turn in normalized_text if turn["role"] == "user"), None)
         user["content"] = ecg_token_placeholders + user["content"]
