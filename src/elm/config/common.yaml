@@ -30,3 +30,5 @@ perturbation: null
 
 # Modality
 modality: signal
+
+enable_thinking: false

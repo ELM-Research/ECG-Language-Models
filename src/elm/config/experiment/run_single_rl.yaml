@@ -3,7 +3,7 @@ defaults:
 
 training:
   optimizer_name: muon
-  training_stage: pretrain
+  training_stage: rl
   batch_size: 2
   num_workers: 0
 
@@ -12,8 +12,8 @@ gpu:
 
 model:
   llm:
-    llm_name: Qwen/Qwen3.5-0.8B
-    llm_tokenizer_name: Qwen/Qwen3.5-0.8B
+    llm_name: Qwen/Qwen3.5-0.8B-Base
+    llm_tokenizer_name: Qwen/Qwen3.5-0.8B-Base
     truncation_length: 1024
     # llm_name: Qwen/Qwen3.5-0.8B
     # llm_tokenizer_name: Qwen/Qwen3.5-0.8B
@@ -30,7 +30,7 @@ model:
 
 data:
   data_names: # yaml list
-    - ELM-Research/pretrain-stage1
+    - ELM-Research/rl-stage1-noaug
   
   split_names: # corresponding to data_names
     - fold1_train

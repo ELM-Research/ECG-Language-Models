@@ -15,6 +15,7 @@ if __name__ == "__main__":
                                             config["data"]["split_names"],
                                             config["model"]["llm"]["llm_tokenizer_name"],
                                             config["model"]["llm"]["truncation_length"],
+                                            config["enable_thinking"],
                                             config["model"]["ecg_tokens"],
                                             config["modality"], config["training"]["batch_size"],
                                             config["training"]["num_workers"], config["seed"],

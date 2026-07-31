@@ -14,6 +14,7 @@ class BuildDataloader:
                  split_names: list,
                  llm_tokenizer_name: str,
                  truncation_length : int,
+                 enable_thinking: bool,
                  ecg_tokens,
                  modality: str,
                  batch_size: int,
@@ -27,6 +28,7 @@ class BuildDataloader:
         self.split_names = split_names
         self.llm_tokenizer_name = llm_tokenizer_name
         self.truncation_length = truncation_length
+        self.enable_thinking = enable_thinking
         self.ecg_tokens = ecg_tokens
         self.modality = modality
         self.batch_size = batch_size
@@ -77,7 +79,8 @@ class BuildDataloader:
         if is_main(): print(f"Length of Dataset: {len(data)}", f"Using {self.modality} modality")
         text_preparer = Text(llm_tokenizer,
                              self.truncation_length,
-                             self.training_stage)
+                             self.training_stage,
+                             self.enable_thinking)
         ecg_modality_preparer = self.build_ecg_modality()
         torch_dataset = ELMDataset(data, ecg_modality_preparer, text_preparer,
                              augmentation = self.augmentation,
