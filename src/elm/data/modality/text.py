@@ -55,7 +55,17 @@ class Text:
             max_length = self.truncation_length, return_dict = True,
             add_generation_prompt = False,
         )
-        tokenized_text["labels"] = tokenized_text["input_ids"].copy()
+        input_ids = tokenized_text["input_ids"]
+        assistant_header = self.llm_tokenizer.encode(
+            "<|im_start|>assistant\n", add_special_tokens = False)
+        im_end = self.llm_tokenizer.convert_tokens_to_ids("<|im_end|>")
+        labels = [-100] * len(input_ids)
+        for response_start in (i + len(assistant_header) for i in range(len(input_ids))
+                               if input_ids[i:i + len(assistant_header)] == assistant_header):
+            response_end = next((i + 1 for i in range(response_start, len(input_ids))
+                                 if input_ids[i] == im_end), len(input_ids))
+            labels[response_start:response_end] = input_ids[response_start:response_end]
+        tokenized_text["labels"] = labels
         return tokenized_text
 
     def prepare_rl(self, text, ecg_token_placeholders):
