@@ -1,4 +1,5 @@
-from elm.utils.constants import ROLES, TAG_RE, IMAGE_WORD_RE, LEADING_PREFIX_RE
+from elm.utils.constants import ROLES, TAG_RE, IMAGE_WORD_RE, \
+    LEADING_PREFIX_RE, ECG_TOKEN_PLACEHOLDER
 
 def clean_text(text: str) -> str:
     text = TAG_RE.sub("", text)
