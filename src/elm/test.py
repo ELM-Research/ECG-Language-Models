@@ -16,6 +16,7 @@ if __name__ == "__main__":
                                             config["model"]["llm"]["llm_tokenizer_name"],
                                             config["model"]["llm"]["truncation_length"],
                                             config["enable_thinking"],
+                                            config["system_prompt_path"],
                                             config["model"]["ecg_tokens"],
                                             config["modality"], config["training"]["batch_size"],
                                             config["training"]["num_workers"], config["seed"],

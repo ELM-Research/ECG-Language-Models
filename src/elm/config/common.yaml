@@ -32,3 +32,5 @@ perturbation: null
 modality: signal
 
 enable_thinking: false
+
+system_prompt_path: src/elm/config/system_prompts/think.txt
