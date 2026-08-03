@@ -11,15 +11,19 @@ gpu:
   distributed: False
 
 model:
-  elm_name:
-    orah
+  elm_name: orah
+  elm_checkpoint: null
+  
   llm:
     pretrained: true
     peft: null
+    lora_rank: 16
+    lora_alpha = 32
     llm_name: Qwen/Qwen3.5-0.8B-Base
     llm_tokenizer_name: Qwen/Qwen3.5-0.8B-Base
     truncation_length: 1024
     attn_implementation: sdpa
+    gradient_checkpointing: true
     # llm_name: Qwen/Qwen3.5-0.8B
     # llm_tokenizer_name: Qwen/Qwen3.5-0.8B
     # llm_name: Qwen/Qwen3-0.6B
@@ -31,6 +35,7 @@ model:
   encoder:
     encoder_name: siglep
     encoder_tokenizer_name: null
+    encoder_checkpoint: null
 
   ecg_tokens:
     mode: static
