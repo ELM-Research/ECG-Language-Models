@@ -31,12 +31,7 @@ class ELMDataset:
     def prepare_ecg(self, ecg_signal):
         if self.perturbation == "blackout": ecg_signal = self.blackout_ecg(ecg_signal.shape)
         elif self.perturbation == "gaussian": ecg_signal = self.gaussian_ecg(ecg_signal.shape)
-
         if self.augmentation: ecg_signal = self.augment_ecg(ecg_signal)
-
-        if type(self.ecg_modality_preparer).__name__ not in ["RGB", "StackedSignal"]:
-            ecg_signal = self.normalize_ecg(ecg_signal)
-
         return self.ecg_modality_preparer(ecg_signal)
 
     def prepare_text(self, text, ecg_token_placeholders):
