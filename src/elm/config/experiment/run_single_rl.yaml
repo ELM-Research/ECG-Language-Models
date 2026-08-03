@@ -12,6 +12,8 @@ gpu:
 
 model:
   llm:
+    pretrained: true
+    peft: null
     llm_name: Qwen/Qwen3.5-0.8B-Base
     llm_tokenizer_name: Qwen/Qwen3.5-0.8B-Base
     truncation_length: 1024

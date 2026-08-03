@@ -81,7 +81,7 @@ class Text:
         return tokenized_text
 
     def prepare_rl(self, text, ecg_token_placeholders):
-        tokenized_text = self.prepare_sft(text, ecg_token_placeholders)
+        return self.prepare_sft(text, ecg_token_placeholders)
 
     def prepare_inference(self, text):
         pass

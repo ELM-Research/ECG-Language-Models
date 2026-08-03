@@ -11,15 +11,23 @@ gpu:
   distributed: False
 
 model:
+  elm_name:
+    orah
   llm:
+    pretrained: true
+    peft: null
     llm_name: Qwen/Qwen3.5-0.8B-Base
     llm_tokenizer_name: Qwen/Qwen3.5-0.8B-Base
     truncation_length: 1024
+    attn_implementation: sdpa
     # llm_name: Qwen/Qwen3.5-0.8B
     # llm_tokenizer_name: Qwen/Qwen3.5-0.8B
     # llm_name: Qwen/Qwen3-0.6B
     # llm_tokenizer_name: Qwen/Qwen3-0.6B
   
+  connector:
+    connector_name: mlp 
+
   encoder:
     encoder_name: siglep
     encoder_tokenizer_name: null

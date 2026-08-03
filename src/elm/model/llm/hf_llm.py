@@ -12,12 +12,9 @@ class HFLLM(nn.Module):
     family-specific handling.
     """
 
-    def __init__(self, llm, pad_token_id, eos_token_id, output_hidden_states):
+    def __init__(self, llm):
         super().__init__()
         self.llm = llm
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.output_hidden_states = output_hidden_states
 
     def forward(self, elm_input_ids, elm_attention_mask,
                 elm_labels, elm_inputs_embeds = None):
@@ -39,7 +36,5 @@ class HFLLM(nn.Module):
                     inputs_embeds = elm_inputs_embeds,
                     attention_mask=elm_attention_mask,
                     max_new_tokens=max_new_tokens,
-                    pad_token_id=self.pad_token_id,
-                    eos_token_id=self.eos_token_id,
                     **gen_kwargs,
                 )
