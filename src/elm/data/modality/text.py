@@ -44,12 +44,20 @@ class Text:
                  return self.prepare_rl(text, ecg_token_placeholders)
         return self.prepare_inference(text)
 
+    def validate_ecg_tokens(self, tokenized_text, ecg_token_placeholders):
+        ecg_token = self.llm_tokenizer.convert_tokens_to_ids(ECG_TOKEN_PLACEHOLDER)
+        expected = ecg_token_placeholders.count(ECG_TOKEN_PLACEHOLDER)
+        actual = tokenized_text["input_ids"].count(ecg_token)
+        if actual != expected:
+            raise ValueError(f"Expected {expected} ECG tokens after tokenization, found {actual}; check tokenizer and truncation")
+        return ecg_token
+
     def prepare_pretrain(self, text, ecg_token_placeholders):
         # Qwen3/3.5 does not put any special tokens except
         # <|endoftext|> at end and as pad
         tokenized_text = self.llm_tokenizer(f"{ecg_token_placeholders}{text}", truncation = True,
                                   max_length = self.truncation_length,)
-        ecg_token = self.llm_tokenizer.convert_tokens_to_ids(ECG_TOKEN_PLACEHOLDER)
+        ecg_token = self.validate_ecg_tokens(tokenized_text, ecg_token_placeholders)
         tokenized_text["labels"] = [-100 if token == ecg_token else token
                                     for token in tokenized_text["input_ids"]]
         return tokenized_text
@@ -67,6 +75,7 @@ class Text:
             max_length = self.truncation_length, return_dict = True,
             add_generation_prompt = False,
         )
+        self.validate_ecg_tokens(tokenized_text, ecg_token_placeholders)
         input_ids = tokenized_text["input_ids"]
         assistant_header = self.llm_tokenizer.encode(
             "<|im_start|>assistant\n", add_special_tokens = False)

@@ -11,7 +11,7 @@ class BuildELM:
                  attn_implementation="sdpa", llm_pretrained=True, peft=None,
                  gradient_checkpointing=True, lora_rank=16, lora_alpha=32,
                  ecg_token_id=None, num_ecg_tokens=100, segment_length=2500,
-                 patch_size=25, num_leads=12, update=("connector",)):
+                 patch_size=25, num_leads=12, update=("connector",), fsdp2=False):
         if elm_name != "orah":
             raise ValueError(f"Unknown ELM: {elm_name}")
         self.llm_name = llm_name
@@ -32,6 +32,7 @@ class BuildELM:
             "num_leads": num_leads,
         }
         self.update = update
+        self.fsdp2 = fsdp2
 
     def build_elm(self):
         llm = self._build_llm()
@@ -41,6 +42,9 @@ class BuildELM:
             checkpoint = torch.load(self.elm_checkpoint, map_location="cpu", weights_only=True)
             model.load_state_dict(checkpoint.get("model_state_dict", checkpoint))
         model.set_trainable(self.update)
+        if self.fsdp2:
+            from elm.utils.parallelism import apply_fsdp2
+            apply_fsdp2(model)
         return {"elm": model, "llm": model.llm, "encoder": model.encoder,
                 "projection": model.connector}
 

@@ -2,11 +2,13 @@ import json
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from transformers import AutoTokenizer, DataCollatorForSeq2Seq
+from transformers import AutoTokenizer
 from datasets import load_dataset
 from typing import Literal
+from elm.data.collator import ELMDataCollator
 from elm.utils.parallelism import get_rank, get_world_size, is_main
 from elm.utils.constants import ECG_TOKEN_PLACEHOLDER, RL_TOKENS
+
 
 class BuildDataloader:
     def __init__(self, data_names: list,
@@ -55,8 +57,7 @@ class BuildDataloader:
             num_workers = self.num_workers if self.training_stage else 0,
             sampler=sampler,
             pin_memory=torch.cuda.is_available(),
-            collate_fn = DataCollatorForSeq2Seq(llm_tokenizer,
-                                                label_pad_token_id=-100),
+            collate_fn = ELMDataCollator(llm_tokenizer, label_pad_token_id=-100),
             persistent_workers=(self.num_workers > 0),
             prefetch_factor=4 if self.num_workers > 0 else None,
         )

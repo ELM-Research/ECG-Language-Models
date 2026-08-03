@@ -15,6 +15,39 @@ If there are any questions or bugs, please do not hesitate to reach out to wjhan
 
 > **Status:** Beta.
 
+## Hugging Face inference
+
+Published Orah checkpoints are ordinary custom Transformers models. The same
+interface supports text, ECG, or both:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+repo = "ELM-Research/orah"
+model = AutoModelForCausalLM.from_pretrained(repo, trust_remote_code=True).eval()
+tokenizer = AutoTokenizer.from_pretrained(repo)
+ecg = torch.from_numpy(ecg_array).unsqueeze(0)  # (batch, 12, 2500)
+
+model.generate(**tokenizer("Explain sinus rhythm", return_tensors="pt"))
+model.generate(ecg_values=ecg)
+prompt = "<ecg>" * model.config.num_ecg_tokens + "\nInterpret this ECG."
+model.generate(**tokenizer(prompt, return_tensors="pt"), ecg_values=ecg)
+```
+
+Combined prompts require exactly `model.config.num_ecg_tokens` placeholders per
+sample; ECG-only calls create those placeholder IDs automatically.
+
+For FSDP2 training, initialize the process group, build the model, call
+`apply_fsdp2(model)` before constructing the optimizer, and call the model via
+`model(...)`. The helper shards Hugging Face transformer blocks bottom-up and
+registers `generate` as an FSDP forward method. Use `get_full_state_dict(model)`
+on every rank to gather a publishable CPU state dict on rank 0.
+
+Convert, save, and optionally upload a training checkpoint with
+`scripts/publish_hf.py`; publishing is intentionally separate from the model
+definition.
+
 ## Setup <a name="setup"></a>
 We use torch 2.9 with cuda 12.8 and primarily use H100 NVL NVIDIA GPUs.
 

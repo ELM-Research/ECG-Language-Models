@@ -21,8 +21,8 @@ class OrahConfig(PretrainedConfig):
                  num_leads=12, **kwargs):
         self.text_config = _config(text_config, "qwen3")
         self.vision_config = _config(vision_config, "siglip2_vision_model")
-        if segment_length % patch_size:
-            raise ValueError("segment_length must be divisible by patch_size")
+        if min(num_ecg_tokens, segment_length, patch_size, num_leads) < 1 or segment_length % patch_size:
+            raise ValueError("ECG dimensions must be positive and segment_length divisible by patch_size")
         self.vision_config.vision_use_head = False
         self.ecg_token_id = ecg_token_id
         self.num_ecg_tokens = num_ecg_tokens
@@ -89,9 +89,6 @@ class Orah(PreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.llm = llm or AutoModelForCausalLM.from_config(config.text_config)
         vision_model = vision_model or AutoModel.from_config(config.vision_config)
-        for model in (self.llm, vision_model):
-            if model.config._attn_implementation is None:
-                model.config._attn_implementation = "sdpa" if getattr(model, "_supports_sdpa", False) else "eager"
         self.encoder = SigLEP(vision_model, config)
         self.connector = MLPProjection(config.vision_config.hidden_size, config.text_config.hidden_size)
         self.post_init()
@@ -132,6 +129,8 @@ class Orah(PreTrainedModel, GenerationMixin):
             raise ValueError("Pass input_ids, not inputs_embeds, when ecg_values is provided")
         if self.config.ecg_token_id is None:
             raise ValueError("config.ecg_token_id is required for ECG input")
+        if input_ids.shape[0] != ecg_values.shape[0]:
+            raise ValueError("input_ids and ecg_values must have the same batch size")
         features = self.get_ecg_features(ecg_values)
         mask = input_ids.eq(self.config.ecg_token_id)
         if not torch.all(mask.sum(-1) == features.shape[1]):
@@ -157,6 +156,7 @@ class Orah(PreTrainedModel, GenerationMixin):
                  inputs_embeds=None, **kwargs):
         input_ids, attention_mask, inputs_embeds = self._prepare_inputs(
             input_ids, attention_mask, ecg_values, inputs_embeds)
+        self.llm.generation_config = self.generation_config
         return self.llm.generate(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
@@ -167,7 +167,8 @@ class Orah(PreTrainedModel, GenerationMixin):
     def set_trainable(self, names):
         self._trainable = set(names)
         for name in ("encoder", "connector", "llm"):
-            getattr(self, name).requires_grad_(name in self._trainable)
+            if name != "llm" or name not in self._trainable:
+                getattr(self, name).requires_grad_(name in self._trainable)
         return self.train(self.training)
 
     def train(self, mode=True):
