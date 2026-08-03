@@ -169,21 +169,19 @@ class ConnectNN:
         encoder_components,
         llm_components,
     ):
-        elm_components = self.build_orah()
+        elm_components = self.build_orah(encoder_components["encoder"].vision_encoder.config.vision_config.hidden_size,
+                                         llm_components["llm"].llm.config.hidden_size)
         return {**encoder_components, **llm_components, **elm_components}
 
     def build_orah(
         self,
+        mlp_input_dim: int,
+        llm_hidden_dim: int,
     ):
         from elm.model.elm.orah import Orah
         from elm.model.connector.mlp import MLPProjection
-        if self.args.encoder in VISION_ENCODERS:
-            projection_dim = VISION_ENCODERS[self.args.encoder]["projection_dim"]
-        else:
-            projection_dim = ECG_ENCODERS[self.args.encoder]["projection_dim"]
-        projection_layer = MLPProjection(projection_dim, self.args.llm)
+        projection_layer = MLPProjection(mlp_input_dim, llm_hidden_dim)
         encoder_llm = Orah(
             self.llm_components["llm"], self.encoder_components["encoder"],
-            projection_layer, set(self.args.update),
-            True if self.args.perturb == "only_text" else False)
+            projection_layer, set(self.args.update),)
         return {"elm": encoder_llm}
