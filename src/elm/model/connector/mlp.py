@@ -1,9 +1,9 @@
 from torch import nn
 
 class MLPProjection(nn.Module):
-    def __init__(self, input_dim, hidden_dim, llm_hidden):
+    def __init__(self, input_dim, hidden_dim):
         super().__init__()
-        hidden_dim = hidden_dim or llm_hidden
+        llm_hidden = hidden_dim
         self.projection = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.GELU(),

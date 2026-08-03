@@ -104,7 +104,6 @@ class BuildLLM:
         self,
         llm,
     ):
-        lora_config = self.get_lora_configs()
         lora_config = LoraConfig(
                     r=self.lora_rank,
                     lora_alpha=self.lora_alpha,
@@ -117,19 +116,15 @@ class BuildLLM:
 class BuildEncoder:
     def __init__(self, encoder_name: str,
                  encoder_checkpoint : str = None,
+                 num_ecg_tokens: int = 100,
                  ):
         self.encoder_name = encoder_name
         self.encoder_checkpoint = encoder_checkpoint
+        self.num_ecg_tokens = num_ecg_tokens
 
     def build_encoder(self):
-        if self.encoder_name == "siglep":
-            encoder_components = self.prepare_siglep()
-
-        assert encoder_components is not None, print("NN Components is None")
-
-        if self.encoder_checkpoint:
-            self.load_nn_checkpoint(encoder_components)
-
+        encoder_components = self.prepare_siglep()
+        if self.encoder_checkpoint: self.load_encoder_checkpoint(encoder_components)
         return encoder_components
 
     def prepare_siglep(self,):
@@ -137,15 +132,11 @@ class BuildEncoder:
         from elm.model.encoder.siglep.siglep import SigLEP
         config = AutoConfig.from_pretrained(self.encoder_checkpoint)
         hf_encoder = AutoModel.from_pretrained(self.encoder_checkpoint, config = config)
-        hidden = hf_encoder.config.vision_config.hidden_size
-        model = SigLEP(hf_encoder, segment_len=self.args.segment_len,
-                          patch_size=25,
-                          num_encoder_tokens=self.args.num_encoder_tokens,
-                          num_leads=len(self.args.leads))
+        model = SigLEP(hf_encoder, num_encoder_tokens=self.num_ecg_tokens)
         return {"encoder": model,}
 
-    def load_nn_checkpoint(self, encoder_components):
-        ckpt = torch.load(self.args.encoder_ckpt, map_location="cpu", weights_only=False)
+    def load_encoder_checkpoint(self, encoder_components):
+        ckpt = torch.load(self.encoder_checkpoint, map_location="cpu", weights_only=False)
         state = ckpt["model_state_dict"]
 
         model_keys = set(encoder_components["encoder"].state_dict().keys())
@@ -158,7 +149,7 @@ class BuildEncoder:
         encoder_components["encoder"].load_state_dict(state, strict=False)
 
         if is_main():
-            print(f"\nLoaded {self.args.encoder} checkpoint from {self.args.encoder_ckpt}")
+            print(f"\nLoaded {self.encoder_name} checkpoint from {self.encoder_checkpoint}")
             if not missing_from_ckpt and not unused_in_ckpt:
                 print("  All layers loaded from checkpoint.")
             else:
@@ -172,111 +163,27 @@ class BuildEncoder:
                         print(f"    - {k}")
                 print(f"  Loaded: {len(loaded_keys)}/{len(model_keys)} model layers\n")
 
-
-def merge_dicts(*parts: Mapping[str, Any], allow_override: Iterable[str] = ()) -> Dict[str, Any]:
-    """Merge dict-like parts with duplicate-key protection.
-    Keys in `allow_override` are allowed to be overwritten by later parts.
-    Later parts win for allowed keys; duplicates for other keys raise."""
-    out: Dict[str, Any] = {}
-    allowed = set(allow_override)
-    for p in parts:
-        for k, v in p.items():
-            if k in out and k not in allowed:
-                raise ValueError(f"Duplicate component keys when merging: {k}")
-            out[k] = v
-    return out
-
-
 class ConnectNN:
-    def __init__(self, llm_components: dict, encoder_components: dict, args: argparse.Namespace):
-        self.args = args
-        self.llm_components = llm_components
-        self.encoder_components = encoder_components
-
     def connect_nn(
         self,
+        encoder_components,
+        llm_components,
     ):
-        if self.args.elm  == "mlp_llava":
-            encoder_llm_components = self.build_mlp_llava()
-        elif self.args.elm == "linear_llava":
-            encoder_llm_components = self.build_linear_llava()
-        elif self.args.elm == "base_elf":
-            encoder_llm_components = self.build_base_elf()
-        elif self.args.elm == "patch_elf":
-            encoder_llm_components = self.build_patch_elf()
-        elif self.args.elm == "conv_elf":
-            encoder_llm_components = self.build_conv_elf()
-        elif self.args.elm == "ecg_byte":
-            encoder_llm_components = {"elm": self.llm_components["llm"]}
-        return merge_dicts(
-            self.encoder_components,
-            self.llm_components,
-            encoder_llm_components,
-            allow_override=("find_unused_parameters",),
-        )
+        elm_components = self.build_orah()
+        return {**encoder_components, **llm_components, **elm_components}
 
-    def build_mlp_llava(
+    def build_orah(
         self,
     ):
-        from elms.llm_encoders.llava import LLaVA
+        from elm.model.elm.orah import Orah
+        from elm.model.connector.mlp import MLPProjection
         if self.args.encoder in VISION_ENCODERS:
             projection_dim = VISION_ENCODERS[self.args.encoder]["projection_dim"]
         else:
             projection_dim = ECG_ENCODERS[self.args.encoder]["projection_dim"]
         projection_layer = MLPProjection(projection_dim, self.args.llm)
-        encoder_llm = LLaVA(
+        encoder_llm = Orah(
             self.llm_components["llm"], self.encoder_components["encoder"],
             projection_layer, set(self.args.update),
             True if self.args.perturb == "only_text" else False)
-        return {"elm": encoder_llm}
-
-    def build_linear_llava(
-        self,
-    ):
-        from elms.llm_encoders.llava import LLaVA
-        if self.args.encoder in VISION_ENCODERS:
-            projection_dim = VISION_ENCODERS[self.args.encoder]["projection_dim"]
-        else:
-            projection_dim = ECG_ENCODERS[self.args.encoder]["projection_dim"]
-        projection_layer = LinearProjection(projection_dim, self.args.llm)
-        encoder_llm = LLaVA(
-            self.llm_components["llm"], self.encoder_components["encoder"],
-            projection_layer, set(self.args.update),
-            True if self.args.perturb == "only_text" else False)
-        return {"elm": encoder_llm}
-
-    def build_base_elf(
-        self,
-    ):
-        from elms.llm_encoders.base_elf import BaseElf
-        projection_dim = len(self.args.leads) * self.args.segment_len
-        projection_layer = LinearProjection(projection_dim, self.args.llm)
-        encoder_llm = BaseElf(self.llm_components["llm"], projection_layer,
-                           set(self.args.update),
-                           True if self.args.perturb == "only_text" else False)
-        return {"elm": encoder_llm}
-
-    def build_patch_elf(self):
-        from elms.llm_encoders.base_elf import BaseElf
-        num_leads = len(self.args.leads)
-        num_patches = self.args.num_encoder_tokens
-        assert self.args.segment_len % num_patches == 0, \
-            f"segment_len ({self.args.segment_len}) must be divisible by num_encoder_tokens ({num_patches})"
-        patch_dim = num_leads * (self.args.segment_len // num_patches)
-        projection_layer = PatchProjection(num_patches, patch_dim, self.args.llm)
-        encoder_llm = BaseElf(self.llm_components["llm"], projection_layer,
-                           set(self.args.update),
-                           True if self.args.perturb == "only_text" else False)
-        return {"elm": encoder_llm}
-
-    def build_conv_elf(self):
-        from elms.llm_encoders.base_elf import BaseElf
-        num_leads = len(self.args.leads)
-        num_patches = self.args.num_encoder_tokens
-        assert self.args.segment_len % num_patches == 0, \
-            f"segment_len ({self.args.segment_len}) must be divisible by num_encoder_tokens ({num_patches})"
-        projection_layer = CNNPatchProjection(num_patches, num_leads, self.args.llm)
-        encoder_llm = BaseElf(self.llm_components["llm"], projection_layer,
-                           set(self.args.update),
-                           True if self.args.perturb == "only_text" else False)
         return {"elm": encoder_llm}

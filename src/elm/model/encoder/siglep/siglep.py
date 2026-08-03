@@ -17,7 +17,7 @@ class Ecg1DEmbeddings(nn.Module):
 
 
 class SigLEP(nn.Module):
-    def __init__(self, vision_encoder, segment_len, patch_size, num_encoder_tokens, num_leads=12):
+    def __init__(self, vision_encoder, num_encoder_tokens, segment_len = 2500, patch_size = 25, num_leads=12):
         super(SigLEP, self).__init__()
         assert segment_len % patch_size == 0, "segment_len must be divisible by patch_size"
         self.vision_encoder = vision_encoder
