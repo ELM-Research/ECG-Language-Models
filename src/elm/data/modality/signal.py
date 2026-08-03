@@ -13,7 +13,7 @@ class Signal:
                 ecg_token_placeholders = self.prepare_static_ecg_tokens()
             elif self.ecg_tokens["mode"] == "dynamic":
                 ecg_token_placeholders = self.prepare_dynamic_ecg_tokens()
-        return {"ecg" : ecg_input,}, ecg_token_placeholders
+        return {"ecg_values": ecg_input}, ecg_token_placeholders
 
     def prepare_static_ecg_tokens(self,):
         return ECG_TOKEN_PLACEHOLDER*self.ecg_tokens["num_ecg_tokens"] + "\n"

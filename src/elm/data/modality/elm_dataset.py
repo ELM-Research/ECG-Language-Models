@@ -34,7 +34,7 @@ class ELMDataset:
 
         if self.augmentation: ecg_signal = self.augment_ecg(ecg_signal)
 
-        if type(self.ecg_modality_preparer).__name__ not in ["RGB", "StackedSignal"]:
+        if type(self.ecg_modality_preparer).__name__ not in ["RGB", "StackedSignal", "Signal"]:
             ecg_signal = self.normalize_ecg(ecg_signal)
 
         return self.ecg_modality_preparer(ecg_signal)

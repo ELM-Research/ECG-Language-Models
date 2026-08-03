@@ -41,22 +41,11 @@ def _decode_for_reward(tokenizer, ids: torch.Tensor, strip_ids: set) -> str:
     return tokenizer.decode(kept, skip_special_tokens=False).strip()
 
 
-def _expand_enc(enc_out: dict, idx: int, G: int) -> dict:
-    out = {}
-    for k, v in enc_out.items():
-        if isinstance(v, torch.Tensor):
-            out[k] = v[idx:idx + 1].expand(G, *v.shape[1:]).contiguous()
-        else:
-            out[k] = v
-    return out
-
-
-def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int, temperature: float) -> torch.Tensor:
+def _log_prob_at_response(model, ids, attn, ecg, pL: int, temperature: float) -> torch.Tensor:
     was_training = model.training
     model.eval()
     try:
-        out = model(elm_input_ids=ids, elm_attention_mask=attn, elm_labels=None,
-                    signal_id_indices=sig_idx, encoder_tokenizer_out=enc_out)
+        out = model(input_ids=ids, attention_mask=attn, ecg_values=ecg)
     finally:
         model.train(was_training)
     targets = ids[:, pL:]
@@ -67,28 +56,28 @@ def _log_prob_at_response(model, ids, attn, sig_idx, enc_out, pL: int, temperatu
 def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
     """Sample G responses for one prompt, compute rewards, advantages, and old log-probs."""
     base = _unwrap(model)
-    device = batch["elm_input_ids"].device
+    device = batch["input_ids"].device
     G = args.rl_group_size
 
     eos_ids = _eos_set(args.llm)
     strip_ids = eos_ids | {int(tokenizer.pad_token_id)}
 
-    labels = batch["elm_labels"][item_idx]
+    labels = batch["labels"][item_idx]
     nz = (labels != -100).nonzero(as_tuple=True)[0]
     if nz.numel() == 0:
         raise ValueError("No response tokens found (labels all -100).")
     rs = nz[0].item()
     gt_text = _decode_for_reward(tokenizer, labels[nz], strip_ids)
 
-    prompt_ids = batch["elm_input_ids"][item_idx, :rs]
-    prompt_attn = batch["elm_attention_mask"][item_idx, :rs]
+    prompt_ids = batch["input_ids"][item_idx, :rs]
+    prompt_attn = batch["attention_mask"][item_idx, :rs]
     pL = prompt_ids.shape[0]
 
     pb = {
-        "elm_input_ids": prompt_ids.unsqueeze(0).expand(G, -1).contiguous(),
-        "elm_attention_mask": prompt_attn.unsqueeze(0).expand(G, -1).contiguous(),
-        "signal_id_indices": batch["signal_id_indices"][item_idx].unsqueeze(0).expand(G, -1).contiguous(),
-        "encoder_tokenizer_out": _expand_enc(batch["encoder_tokenizer_out"], item_idx, G),
+        "input_ids": prompt_ids.unsqueeze(0).expand(G, -1).contiguous(),
+        "attention_mask": prompt_attn.unsqueeze(0).expand(G, -1).contiguous(),
+        "ecg_values": batch["ecg_values"][item_idx:item_idx + 1].expand(
+            G, *batch["ecg_values"].shape[1:]).contiguous(),
     }
 
     was_training = base.training
@@ -117,20 +106,19 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
         degenerate = bool(reward_std < 1e-6)
         adv = ((rewards - rewards.mean()) / (reward_std + 1e-6)).unsqueeze(1).expand_as(resp_mask)
 
-        full_ids = torch.cat([pb["elm_input_ids"], new_tokens], dim=1)
-        full_attn = torch.cat([pb["elm_attention_mask"], resp_mask], dim=1)
+        full_ids = torch.cat([pb["input_ids"], new_tokens], dim=1)
+        full_attn = torch.cat([pb["attention_mask"], resp_mask], dim=1)
 
         with torch.no_grad():
-            old_lp = _log_prob_at_response(base, full_ids, full_attn,
-                                           pb["signal_id_indices"], pb["encoder_tokenizer_out"], pL,
-                                           args.rl_temperature)
+            old_lp = _log_prob_at_response(
+                base, full_ids, full_attn, pb["ecg_values"], pL, args.rl_temperature)
     finally:
         if was_training:
             base.train()
 
     return {
         "full_ids": full_ids, "full_attn": full_attn,
-        "sig_idx": pb["signal_id_indices"], "enc_out": pb["encoder_tokenizer_out"],
+        "ecg_values": pb["ecg_values"],
         "resp_mask": resp_mask, "advantages": adv, "old_log_prob": old_lp, "pL": pL,
         "mean_reward": rewards.mean().item(), "degenerate": degenerate,
         "mean_reward_components": {k: sum(parts[k] for parts in reward_parts) / G for k in reward_parts[0]},
@@ -140,5 +128,5 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
 
 def current_log_prob(model, ro: dict) -> torch.Tensor:
     """Log-prob of rollout under the current (post-update) policy (keeps DDP graph)."""
-    return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["sig_idx"], ro["enc_out"],
+    return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["ecg_values"],
                                  ro["pL"], ro["temperature"])
