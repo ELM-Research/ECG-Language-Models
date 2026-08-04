@@ -42,3 +42,4 @@ model:
   truncation_length: 1024
   num_ecg_tokens: 100
   patch_size: 25
+  trainable: [projector, language_model]

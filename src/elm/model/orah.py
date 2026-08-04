@@ -1,4 +1,5 @@
 import torch
+from peft import PeftModel
 from torch import nn
 from transformers import (
     AutoConfig,
@@ -21,7 +22,7 @@ class OrahConfig(PretrainedConfig):
 
     def __init__(self, text_config=None, vision_config=None, ecg_token_id=None,
                  num_ecg_tokens=100, segment_length=2500, patch_size=25,
-                 num_leads=12, **kwargs):
+                 num_leads=12, trainable=("projector", "language_model"), **kwargs):
         if text_config is None or vision_config is None:
             raise ValueError("text_config and vision_config are required")
         self.text_config = text_config if isinstance(text_config, PretrainedConfig) else AutoConfig.for_model(**text_config)
@@ -34,6 +35,7 @@ class OrahConfig(PretrainedConfig):
         self.segment_length = segment_length
         self.patch_size = patch_size
         self.num_leads = num_leads
+        self.trainable = list(trainable)
         super().__init__(**kwargs)
 
 
@@ -80,6 +82,7 @@ class SigLEP(nn.Module):
 class Orah(PreTrainedModel, GenerationMixin):
     config_class = OrahConfig
     supports_gradient_checkpointing = True
+    _components = ("encoder", "projector", "language_model")
 
     def __init__(self, config, language_model=None, vision_model=None):
         super().__init__(config)
@@ -92,6 +95,7 @@ class Orah(PreTrainedModel, GenerationMixin):
             nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size),
         )
         self.post_init()
+        self.set_trainable(config.trainable)
 
     def get_input_embeddings(self): return self.language_model.get_input_embeddings()
 
@@ -149,6 +153,27 @@ class Orah(PreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
+    def set_trainable(self, names):
+        trainable = set(names)
+        unknown = trainable.difference(self._components)
+        if unknown:
+            raise ValueError(f"Unknown trainable components: {sorted(unknown)}")
+        if isinstance(self.language_model, PeftModel):
+            trainable.add("language_model")
+        self.config.trainable = [name for name in self._components if name in trainable]
+        for name in self._components:
+            module = getattr(self, name)
+            if not isinstance(module, PeftModel):
+                module.requires_grad_(name in trainable)
+        return self.train(self.training)
+
+    def train(self, mode=True):
+        super().train(mode)
+        for name in self._components:
+            if name not in self.config.trainable:
+                getattr(self, name).eval()
+        return self
+
 def build(config, tokenizer):
     settings = config["model"]
     if settings.get("checkpoint"):
@@ -168,7 +193,7 @@ def build(config, tokenizer):
         model = Orah(orah_config, language_model, vision_model)
     if model.get_input_embeddings().num_embeddings != len(tokenizer):
         model.resize_token_embeddings(len(tokenizer))
-    return model
+    return model.set_trainable(settings.get("trainable", model.config.trainable))
 
 
 OrahConfig.register_for_auto_class()
