@@ -18,7 +18,6 @@ class OrahConfig(PretrainedConfig):
     # HuggingFace Pretrained Config Variables
     # https://github.com/huggingface/transformers/blob/main/src/transformers/configuration_utils.py#L163
     model_type = "orah"
-    is_composition = True
     has_no_defaults_at_init = True
     sub_configs = {"text_config": AutoConfig, "vision_config": Siglip2VisionConfig}
 
