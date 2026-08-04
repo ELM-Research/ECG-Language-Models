@@ -11,24 +11,7 @@ gpu:
   distributed: False
 
 model:
-  llm:
-    pretrained: true
-    peft: null
-    llm_name: Qwen/Qwen3.5-0.8B
-    llm_tokenizer_name: Qwen/Qwen3.5-0.8B
-    truncation_length: 1024
-    # llm_name: Qwen/Qwen3.5-0.8B
-    # llm_tokenizer_name: Qwen/Qwen3.5-0.8B
-    # llm_name: Qwen/Qwen3-0.6B
-    # llm_tokenizer_name: Qwen/Qwen3-0.6B
-  
-  encoder:
-    encoder_name: siglep
-    encoder_tokenizer_name: null
-
-  ecg_tokens:
-    mode: static
-    num_ecg_tokens: 100
+  language_model: Qwen/Qwen3.5-0.8B
 
 data:
   data_names: # yaml list
@@ -36,5 +19,3 @@ data:
   
   split_names: # corresponding to data_names
     - fold1_train
-
-  data_subset: null

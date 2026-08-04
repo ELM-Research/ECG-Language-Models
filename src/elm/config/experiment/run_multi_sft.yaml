@@ -3,7 +3,7 @@ defaults:
 
 training:
   optimizer: muon
-  training_stage: pretrain
+  training_stage: sft
   batch_size: 2
   num_workers: 2
 
@@ -11,12 +11,7 @@ gpu:
   distributed: True
 
 model:
-  
-  llm: qwen3.5-0.8b-base
-  llm_tokenizer: qwen3.5-0.8b-base
-  
-  encoder: siglip-ecg
-  encoder_tokenizer: null
+  language_model: Qwen/Qwen3.5-0.8B-Base
 
 data:
   data_names: # yaml list
@@ -25,5 +20,3 @@ data:
   split_names: # corresponding to data_names
     - fold1_train
     - fold1_train
-
-  data_subset: null

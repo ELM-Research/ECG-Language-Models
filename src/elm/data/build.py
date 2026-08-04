@@ -15,7 +15,7 @@ class BuildDataloader:
                  truncation_length : int,
                  enable_thinking: bool,
                  system_prompt_path: str,
-                 ecg_tokens,
+                 num_ecg_tokens: int,
                  modality: str,
                  batch_size: int,
                  num_workers: int,
@@ -30,7 +30,7 @@ class BuildDataloader:
         self.truncation_length = truncation_length
         self.enable_thinking = enable_thinking
         self.system_prompt_path = system_prompt_path
-        self.ecg_tokens = ecg_tokens
+        self.num_ecg_tokens = num_ecg_tokens
         self.modality = modality
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -41,8 +41,9 @@ class BuildDataloader:
         self.development = development
 
     ### TORCH DATALOADER
-    def build_dataloader(self,):
-        llm_tokenizer = self.build_llm_tokenizer()
+    def build_dataloader(self, llm_tokenizer=None):
+        if llm_tokenizer is None:
+            llm_tokenizer = self.build_llm_tokenizer()
         torch_dataset = self.build_torch_dataset(llm_tokenizer)
         return self.build_torch_dataloader(torch_dataset, llm_tokenizer)
 
@@ -90,7 +91,7 @@ class BuildDataloader:
     def build_ecg_modality(self,):
         if self.modality == "signal":
             from elm.data.modality.signal import Signal
-            return Signal(self.ecg_tokens, self.perturbation == "only_text")
+            return Signal(self.num_ecg_tokens, self.perturbation == "only_text")
 
         raise ValueError(f"Unknown data modality: {self.modality}")
 

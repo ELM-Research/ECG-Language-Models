@@ -10,10 +10,13 @@ from transformers import (
     Siglip2VisionModel,
 )
 
+from elm.utils.constants import ECG_TOKEN_PLACEHOLDER
+
 
 class OrahConfig(PretrainedConfig):
     model_type = "orah"
     is_composition = True
+    has_no_defaults_at_init = True
     sub_configs = {"text_config": AutoConfig, "vision_config": Siglip2VisionConfig}
 
     def __init__(self, text_config=None, vision_config=None, ecg_token_id=None,
@@ -22,20 +25,15 @@ class OrahConfig(PretrainedConfig):
         if text_config is None or vision_config is None:
             raise ValueError("text_config and vision_config are required")
         self.text_config = text_config if isinstance(text_config, PretrainedConfig) else AutoConfig.for_model(**text_config)
-        if not isinstance(vision_config, PretrainedConfig):
-            vision_config = {key: value for key, value in vision_config.items() if key != "model_type"}
-            vision_config = Siglip2VisionConfig(**vision_config)
-        self.vision_config = vision_config
+        self.vision_config = (vision_config if isinstance(vision_config, Siglip2VisionConfig)
+                              else Siglip2VisionConfig(**vision_config))
         if min(num_ecg_tokens, segment_length, patch_size, num_leads) < 1 or segment_length % patch_size:
             raise ValueError("ECG dimensions must be positive and segment_length divisible by patch_size")
-        self.vision_config.vision_use_head = False
         self.ecg_token_id = ecg_token_id
         self.num_ecg_tokens = num_ecg_tokens
         self.segment_length = segment_length
         self.patch_size = patch_size
         self.num_leads = num_leads
-        for name in ("bos_token_id", "eos_token_id", "pad_token_id", "tie_word_embeddings", "vocab_size"):
-            kwargs.setdefault(name, getattr(self.text_config, name, None))
         super().__init__(**kwargs)
 
 
@@ -54,9 +52,10 @@ class SigLEP(nn.Module):
     def __init__(self, vision_model, config):
         super().__init__()
         self.model = vision_model
-        self.model.vision_model.embeddings = ECGEmbedding(config)
-        self.model.vision_model.use_head = False
-        self.model.vision_model.head = None
+        backbone = getattr(vision_model, "vision_model", vision_model)
+        backbone.embeddings = ECGEmbedding(config)
+        backbone.use_head = False
+        backbone.head = None
         self.shape = (config.num_leads, config.segment_length)
         self.patch_size = config.patch_size
         self.pool = nn.AdaptiveAvgPool1d(config.num_ecg_tokens)
@@ -64,7 +63,8 @@ class SigLEP(nn.Module):
     def forward(self, ecg_values):
         if tuple(ecg_values.shape[1:]) != self.shape:
             raise ValueError(f"Expected ECG shape (batch, {self.shape[0]}, {self.shape[1]}), got {tuple(ecg_values.shape)}")
-        ecg_values = ecg_values.to(self.model.vision_model.embeddings.patch_embedding.weight)
+        embeddings = getattr(self.model, "vision_model", self.model).embeddings
+        ecg_values = ecg_values.to(embeddings.patch_embedding.weight)
         low = ecg_values.amin((-2, -1), keepdim=True)
         ecg_values = (ecg_values - low) / (ecg_values.amax((-2, -1), keepdim=True) - low + 1e-6)
         patches = ecg_values.unfold(-1, self.patch_size, self.patch_size).transpose(1, 2).flatten(2)
@@ -77,11 +77,6 @@ class SigLEP(nn.Module):
         return self.pool(output.transpose(1, 2)).transpose(1, 2)
 
 
-class MLPProjection(nn.Sequential):
-    def __init__(self, input_dim, output_dim):
-        super().__init__(nn.Linear(input_dim, output_dim), nn.GELU(), nn.Linear(output_dim, output_dim))
-
-
 class Orah(PreTrainedModel, GenerationMixin):
     config_class = OrahConfig
     supports_gradient_checkpointing = True
@@ -91,13 +86,12 @@ class Orah(PreTrainedModel, GenerationMixin):
         self.language_model = language_model or AutoModelForCausalLM.from_config(config.text_config)
         vision_model = vision_model or Siglip2VisionModel(config.vision_config)
         self.encoder = SigLEP(vision_model, config)
-        self.projector = MLPProjection(config.vision_config.hidden_size, config.text_config.hidden_size)
+        self.projector = nn.Sequential(
+            nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size),
+            nn.GELU(),
+            nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size),
+        )
         self.post_init()
-
-    @classmethod
-    def from_components(cls, language_model, vision_model, ecg_token_id, **kwargs):
-        config = OrahConfig(language_model.config, vision_model.config, ecg_token_id, **kwargs)
-        return cls(config, language_model, vision_model)
 
     def get_input_embeddings(self): return self.language_model.get_input_embeddings()
 
@@ -109,25 +103,19 @@ class Orah(PreTrainedModel, GenerationMixin):
 
     def resize_token_embeddings(self, new_num_tokens=None, **kwargs):
         embeddings = self.language_model.resize_token_embeddings(new_num_tokens, **kwargs)
-        self.config.text_config.vocab_size = self.config.vocab_size = embeddings.num_embeddings
+        self.vocab_size = embeddings.num_embeddings
         return embeddings
 
-    def get_ecg_features(self, ecg_values): return self.projector(self.encoder(ecg_values))
-
     def _prepare_inputs(self, input_ids, attention_mask, ecg_values, inputs_embeds):
-        if input_ids is None and ecg_values is not None:
-            if self.config.ecg_token_id is None:
-                raise ValueError("ecg_token_id is required for ECG input")
-            input_ids = torch.full((ecg_values.shape[0], self.config.num_ecg_tokens), self.config.ecg_token_id,
-                                   dtype=torch.long, device=self.get_input_embeddings().weight.device)
-            attention_mask = torch.ones_like(input_ids)
         if ecg_values is None:
             return input_ids, attention_mask, inputs_embeds
         if self.config.ecg_token_id is None:
             raise ValueError("ecg_token_id is required for ECG input")
+        if input_ids is None:
+            raise ValueError("input_ids are required with ECG input")
         if input_ids.shape[0] != ecg_values.shape[0]:
             raise ValueError("Text and ECG batch sizes must match")
-        features = self.get_ecg_features(ecg_values)
+        features = self.projector(self.encoder(ecg_values))
         mask = input_ids.eq(self.config.ecg_token_id)
         if not torch.all(mask.sum(-1) == features.shape[1]):
             raise ValueError(f"Each input must contain {features.shape[1]} ECG tokens")
@@ -152,7 +140,6 @@ class Orah(PreTrainedModel, GenerationMixin):
     def generate(self, input_ids=None, attention_mask=None, ecg_values=None, inputs_embeds=None, **kwargs):
         input_ids, attention_mask, inputs_embeds = self._prepare_inputs(
             input_ids, attention_mask, ecg_values, inputs_embeds)
-        self.language_model.generation_config = self.generation_config
         if inputs_embeds is None:
             return self.language_model.generate(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
         return self.language_model.generate(
@@ -162,28 +149,26 @@ class Orah(PreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-    def set_trainable(self, names):
-        self._trainable = set(names)
-        for name in ("encoder", "projector", "language_model"):
-            if name not in self._trainable:
-                getattr(self, name).requires_grad_(False)
-            elif name != "language_model":
-                getattr(self, name).requires_grad_(True)
-        return self.train(self.training)
-
-    def train(self, mode=True):
-        super().train(mode)
-        for name in ("encoder", "projector", "language_model"):
-            if hasattr(self, "_trainable") and name not in self._trainable:
-                getattr(self, name).eval()
-        return self
-
-
-def build_orah(text_model, vision_model, vocab_size, ecg_token_id, **kwargs):
-    language_model = AutoModelForCausalLM.from_pretrained(text_model)
-    language_model.resize_token_embeddings(vocab_size)
-    encoder = Siglip2VisionModel.from_pretrained(vision_model)
-    return Orah.from_components(language_model, encoder, ecg_token_id, **kwargs)
+def build(config, tokenizer):
+    settings = config["model"]
+    if settings.get("checkpoint"):
+        model = Orah.from_pretrained(settings["checkpoint"])
+    else:
+        language_model = AutoModelForCausalLM.from_pretrained(settings["language_model"])
+        vision_model = Siglip2VisionModel.from_pretrained(settings["vision_model"])
+        orah_config = OrahConfig(
+            language_model.config,
+            vision_model.config,
+            tokenizer.convert_tokens_to_ids(ECG_TOKEN_PLACEHOLDER),
+            num_ecg_tokens=settings["num_ecg_tokens"],
+            segment_length=config["segment_length"],
+            patch_size=settings["patch_size"],
+            num_leads=len(config["leads"]),
+        )
+        model = Orah(orah_config, language_model, vision_model)
+    if model.get_input_embeddings().num_embeddings != len(tokenizer):
+        model.resize_token_embeddings(len(tokenizer))
+    return model
 
 
 OrahConfig.register_for_auto_class()

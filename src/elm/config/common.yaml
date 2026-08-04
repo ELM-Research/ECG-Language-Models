@@ -34,3 +34,11 @@ modality: signal
 enable_thinking: false
 
 system_prompt_path: src/elm/config/system_prompts/think.txt
+
+model:
+  name: orah
+  checkpoint: null
+  vision_model: google/siglip2-base-patch16-naflex
+  truncation_length: 1024
+  num_ecg_tokens: 100
+  patch_size: 25

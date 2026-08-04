@@ -78,6 +78,9 @@ We support the following datasets in a unified way through datasets from Hugging
 ## ELMs
 We implement several ELMs and describe how to train each variant.
 
+`model.name` maps directly to a module in `src/elm/model/`. For example,
+`name: orah` loads `src/elm/model/orah.py`. Each model module implements its
+complete architecture and exposes `build(config, tokenizer)`.
 
 ## Research
 We list research projects that have been conducted using this repository. Please feel free to add your own research here!
