@@ -99,25 +99,20 @@ class Orah(PreTrainedModel, GenerationMixin):
         config = OrahConfig(language_model.config, vision_model.config, ecg_token_id, **kwargs)
         return cls(config, language_model, vision_model)
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
+    def get_input_embeddings(self): return self.language_model.get_input_embeddings()
 
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
+    def set_input_embeddings(self, value): self.language_model.set_input_embeddings(value)
 
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
+    def get_output_embeddings(self): return self.language_model.get_output_embeddings()
 
-    def set_output_embeddings(self, value):
-        self.language_model.set_output_embeddings(value)
+    def set_output_embeddings(self, value): self.language_model.set_output_embeddings(value)
 
     def resize_token_embeddings(self, new_num_tokens=None, **kwargs):
         embeddings = self.language_model.resize_token_embeddings(new_num_tokens, **kwargs)
         self.config.text_config.vocab_size = self.config.vocab_size = embeddings.num_embeddings
         return embeddings
 
-    def get_ecg_features(self, ecg_values):
-        return self.projector(self.encoder(ecg_values))
+    def get_ecg_features(self, ecg_values): return self.projector(self.encoder(ecg_values))
 
     def _prepare_inputs(self, input_ids, attention_mask, ecg_values, inputs_embeds):
         if input_ids is None and ecg_values is not None:
