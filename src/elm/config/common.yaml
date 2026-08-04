@@ -43,3 +43,18 @@ model:
   num_ecg_tokens: 100
   patch_size: 25
   trainable: [projector, language_model]
+  language_model: Qwen/Qwen3.5-0.8B-Base
+  peft: null
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+

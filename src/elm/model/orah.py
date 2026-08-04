@@ -1,5 +1,5 @@
 import torch
-from peft import PeftModel
+from peft import PeftModel, LoraConfig, get_peft_model
 from torch import nn
 from transformers import (
     AutoConfig,
@@ -15,6 +15,7 @@ from elm.utils.constants import ECG_TOKEN_PLACEHOLDER
 
 
 class OrahConfig(PretrainedConfig):
+    # HuggingFace Pretrained Config Variables
     model_type = "orah"
     is_composition = True
     has_no_defaults_at_init = True
@@ -80,6 +81,7 @@ class SigLEP(nn.Module):
 
 
 class Orah(PreTrainedModel, GenerationMixin):
+    # HuggingFace Pretrained Config Variables
     config_class = OrahConfig
     supports_gradient_checkpointing = True
     _components = ("encoder", "projector", "language_model")
@@ -110,7 +112,7 @@ class Orah(PreTrainedModel, GenerationMixin):
         self.vocab_size = embeddings.num_embeddings
         return embeddings
 
-    def _prepare_inputs(self, input_ids, attention_mask, ecg_values, inputs_embeds):
+    def prepare_inputs(self, input_ids, attention_mask, ecg_values, inputs_embeds):
         if ecg_values is None:
             return input_ids, attention_mask, inputs_embeds
         if self.config.ecg_token_id is None:
@@ -130,7 +132,7 @@ class Orah(PreTrainedModel, GenerationMixin):
 
     def forward(self, input_ids=None, attention_mask=None, labels=None, ecg_values=None,
                 inputs_embeds=None, **kwargs):
-        input_ids, attention_mask, inputs_embeds = self._prepare_inputs(
+        input_ids, attention_mask, inputs_embeds = self.prepare_inputs(
             input_ids, attention_mask, ecg_values, inputs_embeds)
         return self.language_model(
             input_ids=None if inputs_embeds is not None else input_ids,
@@ -142,7 +144,7 @@ class Orah(PreTrainedModel, GenerationMixin):
 
     @torch.no_grad()
     def generate(self, input_ids=None, attention_mask=None, ecg_values=None, inputs_embeds=None, **kwargs):
-        input_ids, attention_mask, inputs_embeds = self._prepare_inputs(
+        input_ids, attention_mask, inputs_embeds = self.prepare_inputs(
             input_ids, attention_mask, ecg_values, inputs_embeds)
         if inputs_embeds is None:
             return self.language_model.generate(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
@@ -175,26 +177,32 @@ class Orah(PreTrainedModel, GenerationMixin):
         return self
 
 def build(config, tokenizer):
-    settings = config["model"]
-    if settings.get("checkpoint"):
-        model = Orah.from_pretrained(settings["checkpoint"])
+    if config["model"].get("checkpoint"):
+        model = Orah.from_pretrained(config["model"]["checkpoint"])
     else:
-        language_model = AutoModelForCausalLM.from_pretrained(settings["language_model"])
-        vision_model = Siglip2VisionModel.from_pretrained(settings["vision_model"])
+        language_model = AutoModelForCausalLM.from_pretrained(config["model"]["language_model"])
+        if config["model"]["peft"]:
+            lora_config = LoraConfig(
+                r = config["model"]["lora_rank"],
+                lora_alpha = config["model"]["lora_alpha"],
+                target_modules = config["model"]["target_modules"],
+            )
+            language_model = get_peft_model(language_model, lora_config)
+            language_model.print_trainable_parameters()
+        vision_model = Siglip2VisionModel.from_pretrained(config["model"]["vision_model"])
         orah_config = OrahConfig(
             language_model.config,
             vision_model.config,
             tokenizer.convert_tokens_to_ids(ECG_TOKEN_PLACEHOLDER),
-            num_ecg_tokens=settings["num_ecg_tokens"],
+            num_ecg_tokens=config["model"]["num_ecg_tokens"],
             segment_length=config["segment_length"],
-            patch_size=settings["patch_size"],
+            patch_size=config["model"]["patch_size"],
             num_leads=len(config["leads"]),
         )
         model = Orah(orah_config, language_model, vision_model)
     if model.get_input_embeddings().num_embeddings != len(tokenizer):
         model.resize_token_embeddings(len(tokenizer))
-    return model.set_trainable(settings.get("trainable", model.config.trainable))
-
+    return model.set_trainable(config["model"].get("trainable", model.config.trainable))
 
 OrahConfig.register_for_auto_class()
 Orah.register_for_auto_class("AutoModelForCausalLM")
