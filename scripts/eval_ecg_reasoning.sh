@@ -3,7 +3,7 @@
 set -euo pipefail
 
 DATASET=mimic_iv_ecg
-RESULTS=./mimic_inference_results_3b
+RESULTS=./mimic_inference_mlp_llava_qwen3.5-2b-base_siglip-ecg_sft-stage2-ptbxl-noaug
 CKPT=/p01/whan/ECG-Bench/src/runs/mlp_llava_qwen3.5-2b-base_siglip-ecg/sft-stage2-ptbxl-noaug/0/checkpoints/epoch_best.pt
 
 # Step 1: run our model and curate per-sample responses under $RESULTS/ecglm/$DATASET/<dx>/*.json
@@ -11,7 +11,6 @@ CUDA_VISIBLE_DEVICES=3 uv run scripts/run_ecg_reasoning_bench.py ./ecg-reasoning
     --dataset "$DATASET" \
     --ecg-base-dir ../../data/mimic_iv/ \
     --output-dir "$RESULTS" \
-    --enable-condensed-chat \
     --llm qwen3.5-2b-base \
     --encoder siglip-ecg \
     --elm mlp_llava \

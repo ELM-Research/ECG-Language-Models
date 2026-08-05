@@ -20,7 +20,21 @@ from ecg_reasoning_benchmark.models import BaseModel, register_model  # noqa: E4
 
 _ANSWER = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
 _THINK = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+_ANSWER_ONLY = (
+    "Your response must be **ONLY** the full text of the selected option. Do not include any "
+    "uncertainty, explanation, reasoning, or extra words."
+)
 
+def _format_question(turn: dict, include_options: bool) -> str:
+    text = f"Question: {turn['question']}\n\n"
+    if not include_options:
+        return text
+    intro = (
+        "This question may have multiple correct answers from the following options:"
+        if "select all possible leads" in turn["question"].lower()
+        else "This question has one of the following options as the correct answer:"
+    )
+    return text + intro + "\n" + "".join(f"- {o}\n" for o in turn["options"]) + _ANSWER_ONLY
 
 def _id_set(entry) -> set[int]:
     """Token ids from a watch_tokens entry (an ``{id: str}`` dict or an id iterable)."""
@@ -90,10 +104,7 @@ class ELM(BaseModel):
             if turn.get("role") == "model":
                 prompt.append_message(prompt.roles[1], turn["text"])
                 continue
-            message = f"Question: {turn['question']}"
-            if not enable_condensed_chat or i == len(turns) - 1:  # condensed chat: options on the live turn only
-                message += "\nOptions:\n" + "\n".join(f"- {o}" for o in turn["options"])
-                message += "\nRespond with exactly one of the options."
+            message = _format_question(turn, not enable_condensed_chat or i == len(turns) - 1)
             if "signal" in turn:  # the ECG rides on the first (initial-diagnostic) user turn
                 signal = self._prepare_signal(turn["signal"])
                 message = self.placeholder + message
