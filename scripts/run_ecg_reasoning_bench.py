@@ -2,8 +2,9 @@ import argparse
 import os
 import re
 import sys
-
+import numpy as np
 import torch
+from scipy import interpolate
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for _p in (os.path.join(REPO, "src"), os.path.join(REPO, "ecg-reasoning-benchmark")):
@@ -25,6 +26,14 @@ def _id_set(entry) -> set[int]:
     """Token ids from a watch_tokens entry (an ``{id: str}`` dict or an id iterable)."""
     return set(entry.keys() if isinstance(entry, dict) else entry)
 
+def nsample_ecg(ecg, orig_fs = 500, target_fs = 250):
+    n = len(ecg)
+    duration = n / orig_fs
+    source = np.linspace(0, duration, n, endpoint = True)
+    target = np.linspace(0, duration, int(n*target_fs / orig_fs), endpoint=True)
+    return interpolate.interp1d(
+        source, ecg, kind="cubic", axis=0, bounds_error=False, fill_value="extrapolate"
+    )(target)
 
 def extract_answer(text: str) -> str:
     """Return the final answer from a plain or ``<think>``/``<answer>`` RL response."""
@@ -59,10 +68,8 @@ class ELM(BaseModel):
         return cls(args)
 
     def _prepare_signal(self, signal: torch.Tensor) -> torch.Tensor:
-        """Match training preprocessing: decimate 500->250 Hz, fit segment_len, min-max to [0, 1]."""
         seg = self.args.segment_len
-        signal = signal.to(torch.float32)
-        signal = signal[:, :: max(1, signal.shape[-1] // seg)][:, :seg]
+        signal = torch.from_numpy(nsample_ecg(signal.T.cpu().numpy(), 500, 250).T).to(torch.float32)[:, :seg]
         lo, hi = signal.min(), signal.max()
         signal = ((signal - lo) / (hi - lo + self.args.norm_eps)).clamp(0, 1)
         if signal.shape[-1] < seg:  # only trips if a signal is shorter than segment_len; pad baseline
@@ -117,7 +124,7 @@ def main() -> None:
     parser.add_argument("--segment-len", type=int, default=2500)
     parser.add_argument("--update", nargs="+", default=["connector", "llm"], choices=["encoder", "connector", "llm"])
     parser.add_argument("--perturb", default=None, choices=["noise", "zeros", "only_text"])
-    parser.add_argument("--train-phase", default="sft", choices=["pretrain", "sft", "rl"])
+    parser.add_argument("--train-phase", default="rl", choices=["pretrain", "sft", "rl"])
     parser.add_argument("--explicit-thinking", action="store_true")
     parser.add_argument("--max-new-tokens", type=int, default=1024)
     parser.add_argument("--device", default=None)
