@@ -1,10 +1,12 @@
-python3 ./src/main_chat.py \
+
+CUDA_VISIBLE_DEVICES=0 \
+uv run torchrun --standalone --nproc_per_node=1 \
+src/main_chat.py \
 --system_prompt src/dataloaders/system_prompts/system_prompt_original.txt \
 --llm qwen3.5-0.8b \
 --elm mlp_llava \
 --encoder siglip-ecg \
 --elm_ckpt ./src/runs/mlp_llava_qwen3.5-0.8b_siglip-ecg/ecg-qa-ptbxl-250-2500/1/checkpoints/epoch_best.pt \
---encoder_ckpt ../ecg_encoder/src/runs/pretrain/siglip2-base-patch16-naflex/1/checkpoints/epoch_best.pt \
 --num_encoder_tokens 25
 
 

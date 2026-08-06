@@ -57,13 +57,11 @@ def main():
 
         signal_id_indices = torch.unsqueeze(torch.tensor(chat.find_signal_token_indices(tokenized_prompt)), dim=0).to(device)
 
-        max_new_tokens = args.max_new_tokens
-
         generate_output = elm.generate(elm_input_ids,
          encoder_tokenizer_out,
          elm_attention_mask,
          signal_id_indices,
-         max_new_tokens)
+         args.max_new_tokens)
         
         response = chat.decode_response(generate_output[0].tolist())
         print(response)
