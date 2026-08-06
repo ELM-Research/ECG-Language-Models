@@ -1,4 +1,4 @@
-python3 ./src/main_chat2.py \
+python3 ./src/main_chat.py \
 --system_prompt src/dataloaders/system_prompts/system_prompt_original.txt \
 --llm qwen3.5-0.8b \
 --elm mlp_llava \
