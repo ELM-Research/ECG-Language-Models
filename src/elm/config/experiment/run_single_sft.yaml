@@ -7,9 +7,6 @@ training:
   batch_size: 2
   num_workers: 0
 
-gpu:
-  distributed: False
-
 data:
   data_names: # yaml list
     - ELM-Research/sft-stage1-noaug

@@ -8,7 +8,7 @@ training:
   num_workers: 2
 
 gpu:
-  distributed: True
+  strategy: ddp
 
 data:
   data_names: # yaml list

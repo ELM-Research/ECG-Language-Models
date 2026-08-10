@@ -3,7 +3,7 @@ import torch
 from elm.data.build import BuildDataloader
 from elm.config.load import get_config
 from elm.model import build_model
-from elm.utils.parallelism import init_dist, cleanup, is_main
+from elm.utils.parallelism import cleanup, init_dist, is_main, setup_model
 from elm.utils.seed import set_seed
 from elm.utils.logging import setup_experiment_folder, setup_wandb, cleanup_wandb
 
@@ -11,8 +11,9 @@ RUNS_DIR = "./src/runs"
 
 if __name__ == "__main__":
     config, exp_name = get_config()
+    strategy = config["gpu"]["strategy"]
 
-    if config["gpu"]["distributed"]: init_dist()
+    if strategy: init_dist()
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -41,9 +42,9 @@ if __name__ == "__main__":
                                              perturbation=config["perturbation"],
                                              development=config["development"],)
         tokenizer = dataloader_builder.build_llm_tokenizer()
-        model = build_model(config, tokenizer)
+        model = setup_model(build_model(config, tokenizer), strategy)
         dataloader = dataloader_builder.build_dataloader(tokenizer)
 
     finally:
         if config["wandb"] and is_main(): cleanup_wandb()
-        if config["gpu"]["distributed"]: cleanup()
+        if strategy: cleanup()

@@ -2,6 +2,9 @@ seed: 0
 development: true
 wandb: false
 
+gpu:
+  strategy: null # ddp or fsdp2
+
 # Which leads to use
 # Corresponds to PTB-XL lead ordering
 # ["I", "II", "III", "aVL", "aVR", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
@@ -55,5 +58,4 @@ model:
     - gate_proj
     - up_proj
     - down_proj
-
 

@@ -1,8 +1,8 @@
-import torch
-from torch import distributed
 import os
 
-import torch, argparse, os, torch.distributed as dist
+import torch
+from torch import distributed
+from torch.distributed.fsdp import fully_shard, register_fsdp_forward_method
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 def barrier():
@@ -27,8 +27,7 @@ def broadcast_value(value, src: int = 0):
 def init_dist():
     device = torch.device("cuda", get_local_rank())
     torch.cuda.set_device(device)
-    distributed.init_process_group(backend=distributed.get_default_backend_for_device(device),
-                                   device_id = device)
+    distributed.init_process_group(device_id=device)
 
 def get_local_rank() -> int:
     return int(os.environ.get("LOCAL_RANK", 0))
@@ -43,29 +42,25 @@ def is_main() -> bool:
     return get_rank() == 0
 
 
-def setup_gpu(model: torch.nn.Module, find_unused_parameters) -> torch.nn.Module:
-    device = get_device()
-    model = model.to(device)
-    if getattr(self.args, "distributed", False):
-        model = DDP(model, device_ids=[device.index], output_device=device.index, find_unused_parameters=find_unused_parameters)
-    if is_main():
-        print(f"find_unused_parameters: {find_unused_parameters}")
-    if self.args.torch_compile:
-        model = torch.compile(model)
-    return model
+def setup_model(model: torch.nn.Module, strategy: str | None) -> torch.nn.Module:
+    if strategy == "fsdp2":
+        block_names = {name for module in model.modules()
+                       for name in (getattr(module, "_no_split_modules", None) or ())}
+        for module in reversed(list(model.modules())):
+            if type(module).__name__ in block_names:
+                fully_shard(module)
+        model = fully_shard(model)
+        if hasattr(model, "generate"):
+            register_fsdp_forward_method(model, "generate")
+        return model
+    if strategy == "ddp":
+        device = get_device(distributed=True)
+        return DDP(model.to(device), device_ids=[device.index])
+    if strategy is None:
+        return model.to(get_device())
+    raise ValueError(f"Unknown distributed strategy: {strategy}")
 
-def get_device() -> torch.device:
-    return get_multi_device() if getattr(self.args, "distributed", False) else self.get_single_device()
-
-def get_single_device(self) -> torch.device:
-    dev = getattr(self.args, "device", None)
-    return torch.device(dev or ("cuda" if torch.cuda.is_available() else "cpu"))
-
-def get_multi_device(self) -> torch.device:
-    if torch.cuda.is_available():
-        return torch.device(f"cuda:{get_local_rank()}")
-    return torch.device("cpu")
-
-def print_model_device(self, model: torch.nn.Module, name: str) -> None:
-    if is_main():
-        print(f"{name} device:", next(model.parameters()).device)
+def get_device(distributed: bool = False) -> torch.device:
+    if distributed:
+        return torch.device("cuda", get_local_rank())
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")

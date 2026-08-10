@@ -8,7 +8,7 @@ training:
   num_workers: 2
 
 gpu:
-  distributed: True
+  strategy: ddp
 
 model:
   language_model: Qwen/Qwen3.5-0.8B-Base
