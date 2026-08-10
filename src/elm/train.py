@@ -27,14 +27,13 @@ if __name__ == "__main__":
             if config["wandb"]: setup_wandb(config)
 
         set_seed(config["seed"])
-        model_config = config["model"]
         dataloader_builder = BuildDataloader(config["data"]["data_names"],
                                              config["data"]["split_names"],
-                                             model_config.get("tokenizer") or model_config["language_model"],
-                                             model_config["truncation_length"],
+                                             config["model"]["tokenizer"],
+                                             config["model"]["truncation_length"],
                                              config["enable_thinking"],
                                              config["system_prompt_path"],
-                                             model_config["num_ecg_tokens"],
+                                             config["model"]["num_ecg_tokens"],
                                              config["modality"], config["training"]["batch_size"],
                                              config["training"]["num_workers"], config["seed"],
                                              training_stage=config["training"]["training_stage"],
