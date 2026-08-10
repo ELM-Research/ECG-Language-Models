@@ -181,15 +181,6 @@ def build(config, tokenizer):
         model = Orah.from_pretrained(config["model"]["checkpoint"])
     else:
         language_model = AutoModelForCausalLM.from_pretrained(config["model"]["language_model"])
-        print(config["model"]["target_modules"])
-        if config["model"]["peft"]:
-            lora_config = LoraConfig(
-                r = config["model"]["lora_rank"],
-                lora_alpha = config["model"]["lora_alpha"],
-                target_modules = config["model"]["target_modules"],
-            )
-            language_model = get_peft_model(language_model, lora_config)
-            language_model.print_trainable_parameters()
         vision_model = Siglip2VisionModel.from_pretrained(config["model"]["vision_model"])
         orah_config = OrahConfig(
             language_model.config,
@@ -201,6 +192,13 @@ def build(config, tokenizer):
             num_leads=len(config["leads"]),
         )
         model = Orah(orah_config, language_model, vision_model)
+        if config["model"]["peft"]:
+            lora_config = LoraConfig(
+                r = config["model"]["lora_rank"],
+                lora_alpha = config["model"]["lora_alpha"],
+                target_modules = config["model"]["target_modules"],
+            )
+            model.language_model = get_peft_model(model.language_model, lora_config)
     if model.get_input_embeddings().num_embeddings != len(tokenizer):
         model.resize_token_embeddings(len(tokenizer))
     return model.set_trainable(config["model"].get("trainable", model.config.trainable))
