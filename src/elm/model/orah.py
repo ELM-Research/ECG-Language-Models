@@ -181,6 +181,7 @@ def build(config, tokenizer):
         model = Orah.from_pretrained(config["model"]["checkpoint"])
     else:
         language_model = AutoModelForCausalLM.from_pretrained(config["model"]["language_model"])
+        print(config["model"]["target_modules"])
         if config["model"]["peft"]:
             lora_config = LoraConfig(
                 r = config["model"]["lora_rank"],

@@ -47,7 +47,7 @@ model:
   patch_size: 25
   trainable: [projector, language_model]
   language_model: Qwen/Qwen3.5-0.8B-Base
-  peft: null
+  peft: true
   lora_rank: 16
   lora_alpha: 32
   target_modules:
