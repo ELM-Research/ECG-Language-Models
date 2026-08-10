@@ -10,9 +10,6 @@ training:
 gpu:
   distributed: False
 
-model:
-  language_model: Qwen/Qwen3.5-0.8B-Base
-
 data:
   data_names: # yaml list
     - ELM-Research/sft-stage1-noaug

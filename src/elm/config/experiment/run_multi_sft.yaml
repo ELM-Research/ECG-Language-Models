@@ -10,12 +10,8 @@ training:
 gpu:
   distributed: True
 
-model:
-  language_model: Qwen/Qwen3.5-0.8B-Base
-
 data:
   data_names: # yaml list
-    - ELM-Research/pretrain-stage1
+    - ELM-Research/sft-stage1-noaug
   split_names: # corresponding to data_names
-    - fold1_train
     - fold1_train
