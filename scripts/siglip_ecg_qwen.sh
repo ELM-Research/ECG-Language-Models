@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-NPROC=8
+export CUDA_VISIBLE_DEVICES=0,1,2,4,6,7
+NPROC=6
 SYSTEM_PROMPT="src/dataloaders/system_prompts/system_prompt_think.txt"
 
 
@@ -23,22 +23,22 @@ COMMON_FLAGS=(
     --wandb
 )
 
-uv run torchrun --standalone --nproc_per_node=$NPROC \
-    src/main_trainer.py \
-    "${COMMON_FLAGS[@]}" \
-    --train_phase pretrain \
-    --data pretrain-stage1 \
-    --epochs 10 \
-    --update connector \
-    --optimizer adamw \
-    --lr 5e-4 \
-    --lr_schedule constant \
-    --weight_decay 0.01 \
-    --batch_size 8 \
-    --encoder_ckpt ../ecg_encoder/src/runs/pretrain/siglip2-base-patch16-naflex/2/checkpoints/epoch_best.pt \
-    --grad_accum_steps 2 \
-    --num_workers 16 \
-    --ref_global_bs 128
+# uv run torchrun --standalone --nproc_per_node=$NPROC \
+#     src/main_trainer.py \
+#     "${COMMON_FLAGS[@]}" \
+#     --train_phase pretrain \
+#     --data pretrain-stage1 \
+#     --epochs 10 \
+#     --update connector \
+#     --optimizer adamw \
+#     --lr 5e-4 \
+#     --lr_schedule constant \
+#     --weight_decay 0.01 \
+#     --batch_size 8 \
+#     --encoder_ckpt ../ecg_encoder/src/runs/pretrain/siglip2-base-patch16-naflex/2/checkpoints/epoch_best.pt \
+#     --grad_accum_steps 2 \
+#     --num_workers 16 \
+#     --ref_global_bs 96
 
 uv run torchrun --standalone --nproc_per_node=$NPROC \
     src/main_trainer.py \
@@ -53,7 +53,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --lr_schedule cosine \
   --batch_size 4 \
   --grad_accum_steps 8 \
-  --ref_global_bs 256 \
+  --ref_global_bs 192 \
   --num_workers 16 \
   --epochs 3 \
   --elm_ckpt src/runs/mlp_llava_qwen3.5-2b-base_siglip-ecg/pretrain-stage1/0/checkpoints/epoch_best.pt
@@ -71,7 +71,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --weight_decay 0.01 \
   --batch_size 4 \
   --grad_accum_steps 4 \
-  --ref_global_bs 128 \
+  --ref_global_bs 96 \
   --epochs 3 \
   --num_workers 16 \
   --elm_ckpt src/runs/mlp_llava_qwen3.5-2b-base_siglip-ecg/pretrain-stage2/0/checkpoints/epoch_best.pt
@@ -90,7 +90,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --weight_decay 0.05 \
   --batch_size 4 \
   --grad_accum_steps 8 \
-  --ref_global_bs 256 \
+  --ref_global_bs 192 \
   --num_workers 16 \
   --elm_ckpt src/runs/mlp_llava_qwen3.5-2b-base_siglip-ecg/sft-stage1-noaug/0/checkpoints/epoch_best.pt \
   --epochs 3
@@ -109,7 +109,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --weight_decay 0.05 \
   --batch_size 4 \
   --grad_accum_steps 8 \
-  --ref_global_bs 256 \
+  --ref_global_bs 192 \
   --num_workers 16 \
   --elm_ckpt src/runs/mlp_llava_qwen3.5-2b-base_siglip-ecg/sft-stage1-noaug/0/checkpoints/epoch_best.pt \
   --epochs 3
@@ -127,7 +127,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
   --weight_decay 0.05 \
   --batch_size 4 \
   --grad_accum_steps 8 \
-  --ref_global_bs 256 \
+  --ref_global_bs 192 \
   --num_workers 16 \
   --elm_ckpt src/runs/mlp_llava_qwen3.5-2b-base_siglip-ecg/sft-stage1-noaug/0/checkpoints/epoch_best.pt \
   --epochs 3
@@ -145,7 +145,7 @@ uv run torchrun --standalone --nproc_per_node=$NPROC \
 #   --weight_decay 0.01 \
 #   --batch_size 1 \
 #   --grad_accum_steps 8 \
-#   --ref_global_bs 64 \
+#   --ref_global_bs 48 \
 #   --epochs 3 \
 #   --rl_algo sapo \
 #   --rl_group_size 16 \
