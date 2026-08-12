@@ -2,10 +2,12 @@ defaults:
   - ../common.yaml
 
 training:
-  optimizer_name: muon
   training_stage: sft
   batch_size: 2
   num_workers: 0
+
+optimizer:
+  name: muon
 
 data:
   data_names: # yaml list

@@ -3,6 +3,7 @@ import torch
 from elm.data.build import BuildDataloader
 from elm.config.load import get_config
 from elm.model import build_model
+from elm.optimizer import build_optimizer
 from elm.utils.parallelism import cleanup, init_dist, is_main, setup_model
 from elm.utils.seed import set_seed
 from elm.utils.logging import setup_experiment_folder, setup_wandb, cleanup_wandb
@@ -29,7 +30,7 @@ if __name__ == "__main__":
         set_seed(config["seed"])
         dataloader_builder = BuildDataloader(config["data"]["data_names"],
                                              config["data"]["split_names"],
-                                             config["model"]["tokenizer"],
+                                             config["model"]["language_model"],
                                              config["model"]["truncation_length"],
                                              config["enable_thinking"],
                                              config["system_prompt_path"],
@@ -42,6 +43,7 @@ if __name__ == "__main__":
                                              development=config["development"],)
         tokenizer = dataloader_builder.build_llm_tokenizer()
         model = setup_model(build_model(config, tokenizer), strategy)
+        optimizer = build_optimizer(config, model)
         dataloader = dataloader_builder.build_dataloader(tokenizer)
 
     finally:
