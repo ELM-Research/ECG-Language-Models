@@ -1,26 +1,23 @@
-import gc
-import torch
-from elm.data.build import BuildDataloader
-from elm.config.load import get_config
-from transformers import AutoModelForCausalLM, AutoConfig
-from peft import LoraConfig, get_peft_model
-
+from transformers import AutoModelForCausalLM
 if __name__ == "__main__":
     # config, _ = get_config()
     # print(config)
 
     # gc.collect()
     # torch.cuda.empty_cache()
-    lora_config = LoraConfig(
-                    r = 16,
-                    lora_alpha = 32,
-                    target_modules = ["q_proj", "k_proj", "v_proj",
-                                      "o_proj", "gate_proj", "up_proj", "down_proj"],
-                )
+    # lora_config = LoraConfig(
+    #                 r = 16,
+    #                 lora_alpha = 32,
+    #                 target_modules = ["q_proj", "k_proj", "v_proj",
+    #                                   "o_proj", "gate_proj", "up_proj", "down_proj"],
+    #             )
     language_model = AutoModelForCausalLM.from_pretrained(
-                "Qwen/Qwen3.5-0.8B-Base",)
-    language_model = get_peft_model(language_model, lora_config)
-    language_model.print_trainable_parameters()
+                "Qwen/Qwen3.5-0.8B-Base")
+    from collections import Counter
+    dtypes = Counter(p.dtype for p in language_model.parameters())
+    print(dtypes)
+    # language_model = get_peft_model(language_model, lora_config)
+    # language_model.print_trainable_parameters()
 
     # dataloader_builder = BuildDataloader(config["data"]["data_names"],
     #                                         config["data"]["split_names"],
@@ -43,3 +40,5 @@ if __name__ == "__main__":
     #     print(batch["ecg"].shape)
     #     print(dataloader.dataset.text_preparer.llm_tokenizer.decode(batch["input_ids"]))
     #     break
+
+    import wfdb
