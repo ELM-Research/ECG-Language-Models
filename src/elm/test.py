@@ -1,7 +1,8 @@
 import torch
 from torch import nn
 
-from elm.optimizer.build import build
+from elm.optimizer import muon
+from elm.optimizer.muon import build
 
 
 class Model(nn.Module):
@@ -16,9 +17,12 @@ class Model(nn.Module):
         return self.output
 
 
+CONFIG = {"optimizer": {"learning_rate": 1e-4, "weight_decay": 1e-2}}
+
+
 def test_builds_muon_with_adamw_parameter_groups():
     model = Model()
-    optimizer = build({"training": {"learning_rate": 1e-4, "weight_decay": 1e-2}}, model)
+    optimizer = build(CONFIG, model)
     muon, adamw_decay, adamw_no_decay = optimizer.param_groups
 
     assert muon["use_muon"] and muon["params"] == [model.hidden.weight]
@@ -34,20 +38,40 @@ def test_builds_muon_with_adamw_parameter_groups():
 def test_excludes_frozen_parameters():
     model = Model()
     model.hidden.requires_grad_(False)
-    optimizer = build({"training": {"learning_rate": 1e-4, "weight_decay": 1e-2}}, model)
+    optimizer = build(CONFIG, model)
     parameters = {parameter for group in optimizer.param_groups for parameter in group["params"]}
 
     assert model.hidden.weight not in parameters
     assert model.hidden.bias not in parameters
 
 
+def test_peft_parameters_use_adamw(monkeypatch):
+    class Peft(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.lora_a = nn.Linear(4, 2, bias=False)
+            self.lora_b = nn.Linear(2, 4, bias=False)
+
+    model = Model()
+    model.language_model = Peft()
+    monkeypatch.setattr(muon, "PeftModel", Peft)
+    optimizer = build(CONFIG, model)
+
+    assert set(optimizer.param_groups[1]["params"]) >= {
+        model.language_model.lora_a.weight,
+        model.language_model.lora_b.weight,
+    }
+
+
 def test_single_device_step_keeps_state_in_parameter_dtype():
     model = Model()
-    optimizer = build({"training": {"learning_rate": 1e-4, "weight_decay": 1e-2}}, model)
+    optimizer = build(CONFIG, model)
     output = model.output(model.norm(model.hidden(model.embedding(torch.tensor([1, 2])))))
     output.square().mean().backward()
+    gradients = {parameter: parameter.grad.clone() for parameter in model.parameters()}
     optimizer.step()
 
+    assert all(torch.equal(parameter.grad, gradient) for parameter, gradient in gradients.items())
     for parameter, state in optimizer.state.items():
         assert all(value.dtype == parameter.dtype for value in state.values() if torch.is_tensor(value))
 

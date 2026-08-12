@@ -8,7 +8,7 @@ training:
 
 optimizer:
   name: muon
-  learning_rate: 1e-3
+  learning_rate: 1.0e-3
   weight_decay: 0.05
 
 gpu:

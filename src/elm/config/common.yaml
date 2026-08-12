@@ -5,6 +5,11 @@ wandb: false
 gpu:
   strategy: null # ddp or fsdp2
 
+optimizer:
+  name: muon
+  learning_rate: 1.0e-3
+  weight_decay: 0.05
+
 # Which leads to use
 # Corresponds to PTB-XL lead ordering
 # ["I", "II", "III", "aVL", "aVR", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
@@ -50,11 +55,4 @@ model:
   peft: true
   lora_rank: 16
   lora_alpha: 32
-  target_modules:
-    - q_proj
-    - k_proj
-    - v_proj
-    - o_proj
-    - gate_proj
-    - up_proj
-    - down_proj
+  target_modules: all-linear

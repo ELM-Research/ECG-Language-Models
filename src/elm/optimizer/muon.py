@@ -4,6 +4,7 @@
 import math
 
 import torch
+from peft import PeftModel
 from torch import nn
 from torch import distributed
 from torch.distributed.tensor import DTensor
@@ -23,7 +24,7 @@ def orthogonalize(gradient, steps):
 
 def momentum_update(gradient, momentum_buffer, momentum, nesterov):
     momentum_buffer.lerp_(gradient, 1 - momentum)
-    return gradient.lerp_(momentum_buffer, momentum) if nesterov else momentum_buffer
+    return gradient.lerp(momentum_buffer, momentum) if nesterov else momentum_buffer
 
 
 def scale_update(update):
@@ -113,6 +114,8 @@ def build(config, model):
     output = model.get_output_embeddings()
     if output is not None:
         adamw_only.update(output.parameters())
+    if isinstance(getattr(model, "language_model", None), PeftModel):
+        adamw_only.update(model.language_model.parameters())
 
     muon_parameters = [parameter for parameter in parameters if parameter.ndim == 2 and parameter not in adamw_only]
     muon_set = set(muon_parameters)
