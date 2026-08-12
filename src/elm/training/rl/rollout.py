@@ -124,6 +124,6 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
 
 
 def current_log_prob(model, ro: dict) -> torch.Tensor:
-    """Log-prob of rollout under the current (post-update) policy (keeps DDP graph)."""
+    """Log-prob of rollout under the current post-update policy."""
     return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["ecg_values"],
                                  ro["pL"], ro["temperature"])

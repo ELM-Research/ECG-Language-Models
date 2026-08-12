@@ -3,7 +3,7 @@ development: true
 wandb: false
 
 gpu:
-  strategy: null # ddp or fsdp2
+  strategy: null # null for one device, fsdp2 for distributed training
 
 # Which leads to use
 # Corresponds to PTB-XL lead ordering
@@ -38,6 +38,10 @@ enable_thinking: false
 
 system_prompt_path: src/elm/config/system_prompts/think.txt
 
+training:
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-2
+
 model:
   name: orah
   checkpoint: null
@@ -58,4 +62,3 @@ model:
     - gate_proj
     - up_proj
     - down_proj
-
