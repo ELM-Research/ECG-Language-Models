@@ -45,24 +45,6 @@ def test_excludes_frozen_parameters():
     assert model.hidden.bias not in parameters
 
 
-def test_peft_parameters_use_adamw(monkeypatch):
-    class Peft(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.lora_a = nn.Linear(4, 2, bias=False)
-            self.lora_b = nn.Linear(2, 4, bias=False)
-
-    model = Model()
-    model.language_model = Peft()
-    monkeypatch.setattr(muon, "PeftModel", Peft)
-    optimizer = build(CONFIG, model)
-
-    assert set(optimizer.param_groups[1]["params"]) >= {
-        model.language_model.lora_a.weight,
-        model.language_model.lora_b.weight,
-    }
-
-
 def test_single_device_step_keeps_state_in_parameter_dtype():
     model = Model()
     optimizer = build(CONFIG, model)

@@ -199,6 +199,7 @@ def build(config, tokenizer):
                 target_modules = config["model"]["target_modules"],
             )
             model.language_model = get_peft_model(model.language_model, lora_config)
+            model.language_model.print_trainable_parameters()
     if model.get_input_embeddings().num_embeddings != len(tokenizer):
         model.resize_token_embeddings(len(tokenizer))
     return model.set_trainable(config["model"].get("trainable", model.config.trainable))
