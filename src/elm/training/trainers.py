@@ -10,7 +10,7 @@ def batch_to_device(v, device):
         return {k: batch_to_device(x, device) for k, x in v.items()}
     return v
 
-def run_train(
+def run_pretrain_sft(
     nn,
     optimizer,
     dataloader,
