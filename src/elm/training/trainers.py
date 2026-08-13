@@ -16,8 +16,12 @@ def run_pretrain_sft_test(model, optimizer, dataloader, epoch: int,
     model.train()
     progress = tqdm(dataloader, desc=f"Epoch: {epoch}",
                     disable=not is_main(), leave=False,)
+    device = next(model.parameters()).device
     for step, batch in enumerate(progress):
-        print(batch)
+        batch = {k: batch_to_device(v, device) for k, v in batch.items()}
+        out = model(**batch)
+        loss = out.loss
+        print(loss)
         break
 
 

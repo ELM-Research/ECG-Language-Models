@@ -12,7 +12,9 @@ from transformers import (
 )
 
 from elm.utils.constants import ECG_TOKEN_PLACEHOLDER
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 
+print(list(ALL_ATTENTION_FUNCTIONS.keys()))
 
 class OrahConfig(PretrainedConfig):
     # HuggingFace Pretrained Config Variables
@@ -181,6 +183,7 @@ def build(config, tokenizer):
         model = Orah.from_pretrained(config["model"]["checkpoint"])
     else:
         language_model = AutoModelForCausalLM.from_pretrained(config["model"]["language_model"])
+        print("ATTENTION IMPL", language_model.config._attn_implementation)
         vision_model = Siglip2VisionModel.from_pretrained(config["model"]["vision_model"])
         orah_config = OrahConfig(
             language_model.config,
