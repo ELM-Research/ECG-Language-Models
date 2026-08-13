@@ -7,6 +7,7 @@ from elm.optimizer import build_optimizer
 from elm.utils.parallelism import cleanup, init_dist, is_main, setup_model
 from elm.utils.seed import set_seed
 from elm.utils.logging import setup_experiment_folder, setup_wandb, cleanup_wandb
+from elm.training.trainers import run_pretrain_sft_test, run_rl_train_test
 
 RUNS_DIR = "./src/runs"
 
@@ -26,6 +27,9 @@ if __name__ == "__main__":
                 config,)
 
             if config["wandb"]: setup_wandb(config)
+            checkpoint_manager = None # Implement checkpoint manager here
+        else:
+            checkpoint_manager = None
 
         set_seed(config["seed"])
         dataloader_builder = BuildDataloader(config["data"]["data_names"],
@@ -45,6 +49,10 @@ if __name__ == "__main__":
         model = setup_model(build_model(config, tokenizer), strategy)
         optimizer = build_optimizer(config, model)
         dataloader = dataloader_builder.build_dataloader(tokenizer)
+        runner = run_rl_train_test if config["training"]["training_stage"] == "rl" else run_pretrain_sft_test
+        for epoch in range(0, config["training"]["epochs"]): # for resuming checkpoint 0 shouldb e the last epoch
+            epoch_result = runner(model, optimizer, dataloader, epoch,
+                                  checkpoint_manager = checkpoint_manager)
 
     finally:
         if config["wandb"] and is_main(): cleanup_wandb()

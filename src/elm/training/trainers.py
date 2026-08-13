@@ -10,6 +10,17 @@ def batch_to_device(v, device):
         return {k: batch_to_device(x, device) for k, x in v.items()}
     return v
 
+def run_pretrain_sft_test(model, optimizer, dataloader, epoch: int,
+                          grad_accum_steps: int = None, grad_clip: int = None,
+                          checkpoint_manager = None):
+    model.train()
+    progress = tqdm(dataloader, desc=f"Epoch: {epoch}",
+                    disable=not is_main(), leave=False,)
+    for step, batch in enumerate(progress):
+        print(batch)
+        break
+
+
 def run_pretrain_sft(
     nn,
     optimizer,
@@ -91,6 +102,9 @@ def global_mean(total, count, device, dp_size):
         torch.distributed.all_reduce(stats)
     return (stats[0] / stats[1].clamp_min(1)).item()
 
+
+def run_rl_train_test(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None):
+    pass
 
 def run_rl_train(nn, optimizer, dataloader, epoch, args, checkpoint_manager=None):
     nn.train()

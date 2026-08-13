@@ -5,6 +5,7 @@ training:
   training_stage: sft
   batch_size: 2
   num_workers: 2
+  epochs: 1
 
 optimizer:
   name: muon
