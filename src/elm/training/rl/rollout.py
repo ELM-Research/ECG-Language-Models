@@ -90,9 +90,6 @@ def rollout_group(
                 **pb,
                 max_new_tokens=config["max_new_tokens"],
                 do_sample=True,
-                temperature=config["temperature"],
-                top_p=config["top_p"],
-                top_k=0,
             )
 
         new_tokens = gen[:, pL:] if gen.shape[1] > pL and torch.equal(gen[0, :pL], prompt_ids) else gen

@@ -131,3 +131,9 @@ class DataBuilder:
             i = getattr(llm_tokenizer, f"{k}_token_id", None)
             print(f"{k.upper()} -> token: {t!r}, id: {i}")
         print("-" * 20)
+
+
+def build_data(config: dict):
+    builder = DataBuilder(config)
+    tokenizer = builder.build_llm_tokenizer()
+    return tokenizer, builder.build_dataloader(tokenizer)

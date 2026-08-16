@@ -17,8 +17,6 @@ def cleanup():
 def init_dist(strategy: str | None) -> None:
     if strategy is None:
         return
-    if strategy != "fsdp2":
-        raise ValueError(f"Unknown distributed strategy: {strategy}")
     device = torch.device("cuda", get_local_rank())
     torch.cuda.set_device(device)
     distributed.init_process_group(device_id=device)
@@ -62,8 +60,6 @@ def set_gradient_sync(model: torch.nn.Module, enabled: bool) -> None:
 def setup_model(model: torch.nn.Module, strategy: str | None) -> torch.nn.Module:
     if strategy is None:
         return model.to(get_device())
-    if strategy != "fsdp2":
-        raise ValueError(f"Unknown distributed strategy: {strategy}")
 
     block_names = {name for module in model.modules()
                    for name in (getattr(module, "_no_split_modules", None) or ())}

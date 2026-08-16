@@ -8,7 +8,7 @@ import yaml
 from elm.utils.parallelism import is_main
 
 def setup_wandb(config, project = "test", name = None):
-    if is_main(): print("Initializing Wandb")
+    print("Initializing Wandb")
     wandb.init(project=project, config=config, name = name,)
 
 def cleanup_wandb():

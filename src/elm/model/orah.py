@@ -10,11 +10,7 @@ from transformers import (
     Siglip2VisionConfig,
     Siglip2VisionModel,
 )
-
 from elm.utils.constants import ECG_TOKEN_PLACEHOLDER
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
-
-print(list(ALL_ATTENTION_FUNCTIONS.keys()))
 
 class OrahConfig(PretrainedConfig):
     # HuggingFace Pretrained Config Variables

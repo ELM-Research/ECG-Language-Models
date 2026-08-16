@@ -8,7 +8,7 @@ gpu:
 training:
   epochs: 1
   gradient_accumulation_steps: 1
-  max_grad_norm: 0.0
+  max_grad_norm: 1.0
 
 optimizer:
   name: muon
@@ -36,7 +36,7 @@ leads:
 segment_length: 2500
 
 # Augmentation
-augment_ecg: true
+augment_ecg: false
 
 # Perturbation
 perturbation: null
@@ -57,7 +57,7 @@ model:
   patch_size: 25
   trainable: [projector, language_model]
   language_model: Qwen/Qwen3.5-0.8B-Base
-  peft: true
+  peft: false
   lora_rank: 16
   lora_alpha: 32
   target_modules: all-linear
