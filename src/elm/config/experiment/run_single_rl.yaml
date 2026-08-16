@@ -7,8 +7,23 @@ training:
   batch_size: 2
   num_workers: 0
 
+optimizer:
+  name: muon
+  learning_rate: 1.0e-3
+  weight_decay: 0.05
+
 data:
   data_names:
     - ELM-Research/rl-stage1-noaug
   split_names:
     - fold1_train
+
+rl:
+  group_size: 4
+  updates_per_rollout: 2
+  max_new_tokens: 512
+  temperature: 1.0
+  top_p: 1.0
+  tau_pos: 1.0
+  tau_neg: 1.05
+  loss_aggregation: seq-mean-token-mean

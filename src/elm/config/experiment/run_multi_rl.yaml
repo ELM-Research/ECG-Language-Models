@@ -8,7 +8,12 @@ training:
   num_workers: 2
 
 gpu:
-  strategy: fsdp2
+  strategy: ddp
+
+optimizer:
+  name: muon
+  learning_rate: 1.0e-3
+  weight_decay: 0.05
 
 data:
   data_names: # yaml list
@@ -17,3 +22,13 @@ data:
   split_names: # corresponding to data_names
     - fold1_train
     - fold1_train
+
+rl:
+  group_size: 4
+  updates_per_rollout: 2
+  max_new_tokens: 512
+  temperature: 1.0
+  top_p: 1.0
+  tau_pos: 1.0
+  tau_neg: 1.05
+  loss_aggregation: seq-mean-token-mean
