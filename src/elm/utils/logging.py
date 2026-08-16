@@ -18,6 +18,8 @@ def cleanup_wandb():
     wandb.finish(exit_code=1 if error else 0)
 
 def log_wandb(metrics, prefix = None):
+    if not is_main():
+        return
     if prefix: metrics = {f"{prefix}/{k}" : v for k, v in metrics.items()}
     wandb.log(metrics)
 

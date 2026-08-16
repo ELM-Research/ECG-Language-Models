@@ -2,7 +2,6 @@ defaults:
   - ../common.yaml
 
 training:
-  optimizer_name: muon
   training_stage: pretrain
   batch_size: 2
   num_workers: 0
@@ -11,8 +10,7 @@ model:
   language_model: Qwen/Qwen3.5-0.8B
 
 data:
-  data_names: # yaml list
+  data_names:
     - ELM-Research/pretrain-stage1
-  
-  split_names: # corresponding to data_names
+  split_names:
     - fold1_train

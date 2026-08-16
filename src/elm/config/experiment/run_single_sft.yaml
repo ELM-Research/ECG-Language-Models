@@ -7,14 +7,8 @@ training:
   num_workers: 0
   epochs: 2
 
-optimizer:
-  name: muon
-  learning_rate: 1.0e-3
-  weight_decay: 0.05
-
 data:
-  data_names: # yaml list
+  data_names:
     - ELM-Research/sft-stage1-noaug
-  
-  split_names: # corresponding to data_names
+  split_names:
     - fold1_train

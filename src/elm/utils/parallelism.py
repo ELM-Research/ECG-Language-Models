@@ -5,9 +5,6 @@ from torch import distributed
 from torch.distributed.fsdp import FSDPModule, fully_shard, register_fsdp_forward_method
 from torch.distributed.tensor import DTensor
 
-def barrier():
-    if distributed.is_initialized():
-        distributed.barrier()
 
 def cleanup():
     if distributed.is_initialized():
@@ -16,30 +13,50 @@ def cleanup():
         except OSError:
             pass
 
-def broadcast_value(value, src: int = 0):
-    if not distributed.is_initialized():
-        return value
 
-    values = [value]
-    distributed.broadcast_object_list(values, src=src)
-    return values[0]
-
-def init_dist():
+def init_dist(strategy: str | None) -> None:
+    if strategy is None:
+        return
+    if strategy != "fsdp2":
+        raise ValueError(f"Unknown distributed strategy: {strategy}")
     device = torch.device("cuda", get_local_rank())
     torch.cuda.set_device(device)
     distributed.init_process_group(device_id=device)
 
+
 def get_local_rank() -> int:
     return int(os.environ.get("LOCAL_RANK", 0))
+
 
 def get_rank() -> int:
     return distributed.get_rank() if distributed.is_initialized() else 0
 
+
 def get_world_size() -> int:
     return distributed.get_world_size() if distributed.is_initialized() else 1
 
+
 def is_main() -> bool:
     return get_rank() == 0
+
+
+def distributed_mean(total: float, count: float, device: torch.device) -> float:
+    stats = torch.tensor((total, count), dtype=torch.float64, device=device)
+    if distributed.is_initialized():
+        distributed.all_reduce(stats)
+    return (stats[0] / stats[1].clamp_min(1)).item()
+
+
+def any_process(value: bool, device: torch.device) -> bool:
+    flag = torch.tensor(value, dtype=torch.int64, device=device)
+    if distributed.is_initialized():
+        distributed.all_reduce(flag, op=distributed.ReduceOp.MAX)
+    return bool(flag.item())
+
+
+def set_gradient_sync(model: torch.nn.Module, enabled: bool) -> None:
+    if isinstance(model, FSDPModule):
+        model.set_requires_gradient_sync(enabled)
 
 
 def setup_model(model: torch.nn.Module, strategy: str | None) -> torch.nn.Module:

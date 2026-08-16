@@ -1,7 +1,7 @@
 import torch
-from typing import Any
 
-from elm.training.rl.common_funcs import agg_loss, masked_mean
+from elm.training.rl.common_funcs import agg_loss
+
 
 def compute_policy_loss_sapo(
     old_log_prob: torch.Tensor,
@@ -14,9 +14,9 @@ def compute_policy_loss_sapo(
     tau_neg: float = 1.05,
     global_batch_size: int = None,
     dp_size: int = 1,
-) -> tuple[torch.Tensor, dict[str, Any]]:
+) -> torch.Tensor:
     """
-    Compute the smoothed policy objective and related metrics for SAPO.
+    Compute the smoothed policy objective for SAPO.
 
     See https://arxiv.org/pdf/2511.20347 for more details.
 
@@ -60,15 +60,7 @@ def compute_policy_loss_sapo(
         pg_losses = pg_losses * rollout_is_weights
 
     # for SAPO, we need to aggregate the loss at the sequence level (seq-mean-token-mean)
-    pg_loss = agg_loss(
+    return agg_loss(
         loss_mat=pg_losses, loss_mask=response_mask,
         loss_agg_mode=loss_agg_mode, global_batch_size=global_batch_size, dp_size=dp_size,
     )
-
-    pg_metrics = {
-        "actor/ppo_kl": masked_mean(-negative_approx_kl, response_mask).detach().item(),
-        "actor/importance_ratio": masked_mean(ratio, response_mask).detach().item(),
-        "actor/sapo_weight": masked_mean(4 * gate_probs * (1 - gate_probs), response_mask).detach().item(),
-    }
-
-    return pg_loss, pg_metrics

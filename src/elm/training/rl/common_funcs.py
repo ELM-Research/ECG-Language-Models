@@ -21,22 +21,6 @@ implement PPO-like algorithms.
 import torch
 from typing import Optional
 
-def masked_mean(values, mask, axis=None):
-    """
-    Compute the mean of `values` over elements selected by `mask`.
-
-    Args:
-        values (Tensor): Input tensor.
-        mask (Tensor): Boolean or numeric mask of the same shape as `values`.
-        axis (int or tuple of int, optional): Dimension(s) along which to compute the mean.
-            Defaults to None (over all elements).
-
-    Returns:
-        Tensor: Masked mean, with shape equal to `values` reduced over `axis`.
-    """
-    s = masked_sum(values, mask, axis)
-    return s / (mask.sum(axis=axis) + 1e-8)
-
 def masked_sum(values: torch.Tensor, mask: torch.Tensor, axis: int | tuple[int, ...] | None = None) -> torch.Tensor:
     """Compute sum of tensor values where mask is True.
 

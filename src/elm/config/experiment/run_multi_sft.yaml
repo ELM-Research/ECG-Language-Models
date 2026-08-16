@@ -7,11 +7,6 @@ training:
   num_workers: 2
   epochs: 2
 
-optimizer:
-  name: muon
-  learning_rate: 1.0e-3
-  weight_decay: 0.05
-
 gpu:
   strategy: fsdp2
 

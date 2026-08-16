@@ -3,7 +3,12 @@ development: true
 wandb: false
 
 gpu:
-  strategy: null # ddp or fsdp2
+  strategy: null # null for one device, fsdp2 for multiple devices
+
+training:
+  epochs: 1
+  gradient_accumulation_steps: 1
+  max_grad_norm: 0.0
 
 optimizer:
   name: muon

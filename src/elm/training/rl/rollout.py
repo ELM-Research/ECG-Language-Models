@@ -4,13 +4,9 @@ import torch
 from elm.training.rl.rewards import reward_components
 
 
-def _unwrap(m):
-    m = getattr(m, "_orig_mod", m)
-    return m.module if hasattr(m, "module") else m
-
-
 def _eos_set(model) -> set:
-    eos = model.generation_config.eos_token_id
+    generation_model = getattr(model, "language_model", model)
+    eos = generation_model.generation_config.eos_token_id
     return {eos} if isinstance(eos, int) else set(eos or ())
 
 
@@ -50,14 +46,23 @@ def _log_prob_at_response(model, ids, attn, ecg, pL: int, temperature: float) ->
     return torch.log_softmax(logits.float(), dim=-1).gather(-1, targets.unsqueeze(-1)).squeeze(-1)
 
 
-def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
+def rollout_group(
+    model,
+    batch: dict,
+    item_idx: int,
+    tokenizer,
+    config: dict,
+    explicit_thinking: bool,
+) -> dict:
     """Sample G responses for one prompt, compute rewards, advantages, and old log-probs."""
-    base = _unwrap(model)
     device = batch["input_ids"].device
-    G = args.rl_group_size
+    group_size = config["group_size"]
+    pad_id = tokenizer.pad_token_id
+    if pad_id is None:
+        raise ValueError("RL requires a tokenizer pad token")
 
-    eos_ids = _eos_set(base)
-    strip_ids = eos_ids | {int(tokenizer.pad_token_id)}
+    eos_ids = _eos_set(model)
+    strip_ids = eos_ids | {int(pad_id)}
 
     labels = batch["labels"][item_idx]
     nz = (labels != -100).nonzero(as_tuple=True)[0]
@@ -71,32 +76,39 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
     pL = prompt_ids.shape[0]
 
     pb = {
-        "input_ids": prompt_ids.unsqueeze(0).expand(G, -1).contiguous(),
-        "attention_mask": prompt_attn.unsqueeze(0).expand(G, -1).contiguous(),
+        "input_ids": prompt_ids.unsqueeze(0).expand(group_size, -1).contiguous(),
+        "attention_mask": prompt_attn.unsqueeze(0).expand(group_size, -1).contiguous(),
         "ecg_values": batch["ecg_values"][item_idx:item_idx + 1].expand(
-            G, *batch["ecg_values"].shape[1:]).contiguous(),
+            group_size, *batch["ecg_values"].shape[1:]).contiguous(),
     }
 
-    was_training = base.training
+    was_training = model.training
     try:
-        base.eval()
+        model.eval()
         with torch.no_grad():
-            gen = base.generate(**pb, max_new_tokens=args.rl_max_new_tokens,
-                                do_sample=True, temperature=args.rl_temperature,
-                                top_p=args.rl_top_p, top_k=0)
+            gen = model.generate(
+                **pb,
+                max_new_tokens=config["max_new_tokens"],
+                do_sample=True,
+                temperature=config["temperature"],
+                top_p=config["top_p"],
+                top_k=0,
+            )
 
         new_tokens = gen[:, pL:] if gen.shape[1] > pL and torch.equal(gen[0, :pL], prompt_ids) else gen
         if new_tokens.shape[1] == 0:                                 # pathological: nothing generated
-            new_tokens = torch.full((G, 1), int(tokenizer.pad_token_id), dtype=torch.long, device=device)
+            new_tokens = torch.full((group_size, 1), pad_id, dtype=torch.long, device=device)
 
-        resp_mask = _trim_mask(new_tokens, eos_ids, int(tokenizer.pad_token_id))  # (G, gen_len)
+        resp_mask = _trim_mask(new_tokens, eos_ids, pad_id)
 
-        reward_parts = [
-            reward_components(_decode_for_reward(tokenizer, new_tokens[i][resp_mask[i].bool()], strip_ids),
-                              gt_text, getattr(args, "explicit_thinking", False))
-            for i in range(G)
-        ]
-        rewards = torch.tensor([sum(parts.values()) for parts in reward_parts], dtype=torch.float32, device=device)
+        rewards = torch.tensor([
+            sum(reward_components(
+                _decode_for_reward(tokenizer, new_tokens[i][resp_mask[i].bool()], strip_ids),
+                gt_text,
+                explicit_thinking,
+            ).values())
+            for i in range(group_size)
+        ], dtype=torch.float32, device=device)
         reward_std = rewards.std(unbiased=False)
         # All G samples scored identically: group-relative advantage is pure
         # 1e-6-scaled noise. Flag so the trainer can skip this prompt.
@@ -108,18 +120,17 @@ def rollout_group(model, batch: dict, item_idx: int, tokenizer, args) -> dict:
 
         with torch.no_grad():
             old_lp = _log_prob_at_response(
-                base, full_ids, full_attn, pb["ecg_values"], pL, args.rl_temperature)
+                model, full_ids, full_attn, pb["ecg_values"], pL, config["temperature"])
     finally:
         if was_training:
-            base.train()
+            model.train()
 
     return {
         "full_ids": full_ids, "full_attn": full_attn,
         "ecg_values": pb["ecg_values"],
-        "resp_mask": resp_mask, "advantages": adv, "old_log_prob": old_lp, "pL": pL,
+        "response_mask": resp_mask, "advantages": adv, "old_log_prob": old_lp, "pL": pL,
         "mean_reward": rewards.mean().item(), "degenerate": degenerate,
-        "mean_reward_components": {k: sum(parts[k] for parts in reward_parts) / G for k in reward_parts[0]},
-        "temperature": args.rl_temperature,
+        "temperature": config["temperature"],
     }
 
 

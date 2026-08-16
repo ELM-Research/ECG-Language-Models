@@ -2,16 +2,12 @@ defaults:
   - ../common.yaml
 
 training:
-  optimizer: muon
   training_stage: pretrain
   batch_size: 2
   num_workers: 2
 
 gpu:
-  strategy: ddp
-
-model:
-  language_model: Qwen/Qwen3.5-0.8B-Base
+  strategy: fsdp2
 
 data:
   data_names: # yaml list

@@ -4,41 +4,27 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from transformers import AutoTokenizer, DataCollatorForSeq2Seq
 from datasets import load_dataset
-from typing import Literal
 from elm.utils.parallelism import get_rank, get_world_size, is_main
 from elm.utils.constants import ECG_TOKEN_PLACEHOLDER, RL_TOKENS
 
-class BuildDataloader:
-    def __init__(self, data_names: list,
-                 split_names: list,
-                 llm_tokenizer_name: str,
-                 truncation_length : int,
-                 enable_thinking: bool,
-                 system_prompt_path: str,
-                 num_ecg_tokens: int,
-                 modality: str,
-                 batch_size: int,
-                 num_workers: int,
-                 seed: int,
-                 training_stage: Literal["pretrain", "sft", "rl"] | None = None,
-                 augmentation: bool = False,
-                 perturbation: Literal["blackout", "gaussian", "only_text"] | None = None,
-                 development: bool = False,):
-        self.data_names = data_names
-        self.split_names = split_names
-        self.llm_tokenizer_name = llm_tokenizer_name
-        self.truncation_length = truncation_length
-        self.enable_thinking = enable_thinking
-        self.system_prompt_path = system_prompt_path
-        self.num_ecg_tokens = num_ecg_tokens
-        self.modality = modality
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.seed = seed
-        self.training_stage = training_stage
-        self.augmentation = augmentation
-        self.perturbation = perturbation
-        self.development = development
+class DataBuilder:
+    def __init__(self, config: dict):
+        data, model, training = config["data"], config["model"], config["training"]
+        self.data_names = data["data_names"]
+        self.split_names = data["split_names"]
+        self.llm_tokenizer_name = model["language_model"]
+        self.truncation_length = model["truncation_length"]
+        self.num_ecg_tokens = model["num_ecg_tokens"]
+        self.batch_size = training["batch_size"]
+        self.num_workers = training["num_workers"]
+        self.training_stage = training["training_stage"]
+        self.enable_thinking = config["enable_thinking"]
+        self.system_prompt_path = config["system_prompt_path"]
+        self.modality = config["modality"]
+        self.seed = config["seed"]
+        self.augmentation = config["augment_ecg"]
+        self.perturbation = config["perturbation"]
+        self.development = config["development"]
 
     ### TORCH DATALOADER
     def build_dataloader(self, llm_tokenizer=None):
