@@ -170,7 +170,7 @@ def build(config, tokenizer):
             num_leads=len(config["leads"]),
         )
         model = Orah(orah_config, language_model, vision_model)
-    if config["model"]["peft"] and not isinstance(model.language_model, PeftModel):
+    if config["model"]["peft"] and not isinstance(model.language_model, PeftModel): # if we did peft previous stage.
         lora_config = LoraConfig(
             r=config["model"]["lora_rank"], lora_alpha=config["model"]["lora_alpha"],
             target_modules=config["model"]["target_modules"],
