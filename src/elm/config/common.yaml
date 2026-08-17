@@ -9,11 +9,14 @@ training:
   epochs: 1
   gradient_accumulation_steps: 1
   max_grad_norm: 1.0
+  save_steps: 500
 
 optimizer:
   name: muon
   learning_rate: 1.0e-3
   weight_decay: 0.05
+  scheduler: cosine
+  warmup_ratio: 0.03
 
 # Which leads to use
 # Corresponds to PTB-XL lead ordering

@@ -11,6 +11,7 @@ training:
 optimizer:
   learning_rate: 5.0e-6
   weight_decay: 0.01
+  scheduler: constant_with_warmup
 
 model:
   checkpoint: src/runs/sft_stage2/0/checkpoints/epoch_best

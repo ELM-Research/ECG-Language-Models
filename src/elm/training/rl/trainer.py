@@ -13,7 +13,8 @@ from elm.utils.parallelism import (
 )
 
 
-def train_epoch(model, optimizer, dataloader, tokenizer, config: dict, epoch: int) -> dict:
+def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, tokenizer,
+                config: dict, epoch: int) -> dict:
     training, rl = config["training"], config["rl"]
     accumulation_steps = training["gradient_accumulation_steps"]
     if (accumulation_steps < 1 or rl["group_size"] < 2 or
@@ -38,6 +39,7 @@ def train_epoch(model, optimizer, dataloader, tokenizer, config: dict, epoch: in
 
         has_signal = any_process(any(not rollout["degenerate"] for rollout in rollouts), device)
         loss_sum = kl_sum = kl_tokens = 0.0
+        learning_rate = optimizer.param_groups[0]["lr"]
         if has_signal:
             world_size = get_world_size()
             global_batch_size = len(rollouts) * rl["group_size"] * world_size
@@ -60,7 +62,9 @@ def train_epoch(model, optimizer, dataloader, tokenizer, config: dict, epoch: in
                     loss_sum += loss.detach().item() * valid
                     kl_sum += kl.detach().item()
                     kl_tokens += rollout["response_mask"].sum().item()
-                optimizer_step(model, optimizer, training["max_grad_norm"])
+                learning_rate = optimizer.param_groups[0]["lr"]
+                optimizer_step(model, optimizer, scheduler, checkpointer,
+                               training["max_grad_norm"])
 
         loss = distributed_mean(loss_sum, rl["updates_per_rollout"], device) if has_signal else 0.0
         kl = distributed_mean(kl_sum, kl_tokens, device) if has_signal else 0.0
@@ -72,7 +76,9 @@ def train_epoch(model, optimizer, dataloader, tokenizer, config: dict, epoch: in
         optimizer_steps += has_signal * rl["updates_per_rollout"]
         progress.set_postfix(loss=f"{loss:.4f}", kl=f"{kl:.4f}", reward=f"{reward:.4f}")
         if config["wandb"]:
-            log_wandb({"reward": reward, "kl": kl, **{f"reward/{k}": v for k, v in rewards.items()}}, "train")
+            metrics = {"loss": loss, "lr": learning_rate, "reward": reward, "kl": kl,
+                       **{f"reward/{k}": v for k, v in rewards.items()}}
+            log_wandb(metrics, "train")
         rollouts.clear()
 
     return {

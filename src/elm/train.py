@@ -2,6 +2,8 @@ from elm.config.load import get_config
 from elm.data.build import build_data
 from elm.model import build_model
 from elm.optimizer import build_optimizer
+from elm.training.checkpoint import Checkpointer
+from elm.training.common import build_scheduler
 from elm.training.rl.trainer import train_epoch as train_rl_epoch
 from elm.training.supervised import train_epoch as train_supervised_epoch
 from elm.utils.logging import cleanup_wandb, setup_experiment_folder, setup_wandb
@@ -18,9 +20,10 @@ def main():
     init_dist(strategy)
 
     try:
+        run_dir = None
         if is_main():
             if not config["development"]:
-                setup_experiment_folder(f"{RUNS_DIR}/{exp_name}", config)
+                run_dir = setup_experiment_folder(f"{RUNS_DIR}/{exp_name}", config)
             if config["wandb"]:
                 setup_wandb(config, name=exp_name)
 
@@ -28,11 +31,17 @@ def main():
         tokenizer, dataloader = build_data(config)
         model = setup_model(build_model(config, tokenizer), strategy)
         optimizer = build_optimizer(config, model)
+        scheduler = build_scheduler(config, optimizer, dataloader)
+        checkpointer = Checkpointer(model, tokenizer, run_dir, config["training"]["save_steps"],
+                                    enabled=not config["development"])
         for epoch in range(config["training"]["epochs"]):
             if config["training"]["training_stage"] == "rl":
-                result = train_rl_epoch(model, optimizer, dataloader, tokenizer, config, epoch)
+                result = train_rl_epoch(model, optimizer, scheduler, checkpointer,
+                                        dataloader, tokenizer, config, epoch)
             else:
-                result = train_supervised_epoch(model, optimizer, dataloader, config, epoch)
+                result = train_supervised_epoch(model, optimizer, scheduler, checkpointer,
+                                                dataloader, config, epoch)
+            checkpointer.save_best(result["average_loss"])
             if is_main():
                 print(f"Epoch {epoch + 1}: loss={result['average_loss']:.4f}")
 

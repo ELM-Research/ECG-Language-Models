@@ -3,7 +3,7 @@ from elm.training.common import begin_epoch, move_to_device, optimizer_step
 from elm.utils.logging import log_wandb
 from elm.utils.parallelism import distributed_mean, is_main, set_gradient_sync
 
-def train_epoch(model, optimizer, dataloader, config: dict, epoch: int) -> dict:
+def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, config: dict, epoch: int) -> dict:
     training = config["training"]
     accumulation_steps = training["gradient_accumulation_steps"]
     if accumulation_steps < 1:
@@ -29,11 +29,12 @@ def train_epoch(model, optimizer, dataloader, config: dict, epoch: int) -> dict:
         window_loss += loss_value
 
         if update:
-            optimizer_step(model, optimizer, training["max_grad_norm"])
+            learning_rate = optimizer.param_groups[0]["lr"]
+            optimizer_step(model, optimizer, scheduler, checkpointer, training["max_grad_norm"])
             step_loss = distributed_mean(window_loss, window_size, device)
             progress.set_postfix(loss=f"{step_loss:.4f}")
             if config["wandb"]:
-                metrics = {"loss": step_loss, "lr": optimizer.param_groups[0]["lr"], "epoch": epoch}
+                metrics = {"loss": step_loss, "lr": learning_rate, "epoch": epoch}
                 log_wandb(metrics, "train")
             window_loss = 0.0
 
