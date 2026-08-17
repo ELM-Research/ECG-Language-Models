@@ -1,5 +1,5 @@
 import torch
-from peft import PeftModel, LoraConfig, get_peft_model
+from peft import LoraConfig, PeftModel, get_peft_model
 from torch import nn
 from transformers import (
     AutoConfig,
@@ -22,7 +22,7 @@ class OrahConfig(PretrainedConfig):
 
     def __init__(self, text_config=None, vision_config=None, ecg_token_id=None,
                  num_ecg_tokens=100, segment_length=2500, patch_size=25,
-                 num_leads=12, trainable=("projector", "language_model"), **kwargs):
+                 num_leads=12, trainable=("projector", "language_model"), lora=None, **kwargs):
         if text_config is None or vision_config is None:
             raise ValueError("text_config and vision_config are required")
         self.text_config = text_config if isinstance(text_config, PretrainedConfig) else AutoConfig.for_model(**text_config)
@@ -39,6 +39,7 @@ class OrahConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_leads = num_leads
         self.trainable = list(trainable)
+        self.lora = dict(lora) if lora else None
         super().__init__(**kwargs)
 
 
@@ -72,6 +73,8 @@ class Orah(PreTrainedModel, GenerationMixin):
             nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size),
         )
         self.post_init()
+        if config.lora:
+            self.language_model = get_peft_model(self.language_model, LoraConfig(**config.lora))
         self.set_trainable(config.trainable)
 
     def get_input_embeddings(self): return self.language_model.get_input_embeddings()
@@ -135,14 +138,28 @@ class Orah(PreTrainedModel, GenerationMixin):
         unknown = trainable.difference(self._components)
         if unknown:
             raise ValueError(f"Unknown trainable components: {sorted(unknown)}")
-        if isinstance(self.language_model, PeftModel):
-            trainable.add("language_model")
         self.config.trainable = [name for name in self._components if name in trainable]
         for name in self._components:
             module = getattr(self, name)
-            if not isinstance(module, PeftModel):
+            if isinstance(module, PeftModel):
+                module.requires_grad_(False)
+                if name in trainable:
+                    module.set_adapter(module.active_adapter)
+            else:
                 module.requires_grad_(name in trainable)
         return self.train(self.training)
+
+    def set_lora(self, lora):
+        current = self.config.lora
+        if current == lora:
+            return
+        if current and lora:
+            raise ValueError("LoRA configuration does not match the checkpoint")
+        if current:
+            self.language_model = self.language_model.merge_and_unload(safe_merge=True)
+        else:
+            self.language_model = get_peft_model(self.language_model, LoraConfig(**lora))
+        self.config.lora = dict(lora) if lora else None
 
     def train(self, mode=True):
         super().train(mode)
@@ -151,35 +168,54 @@ class Orah(PreTrainedModel, GenerationMixin):
                 getattr(self, name).eval()
         return self
 
+
+def lora_from_config(config):
+    if not config["peft"]:
+        return None
+    return {
+        "r": config["lora_rank"],
+        "lora_alpha": config["lora_alpha"],
+        "target_modules": config["target_modules"],
+    }
+
+
+def load_checkpoint(path):
+    model, loading = Orah.from_pretrained(path, output_loading_info=True)
+    if loading["missing_keys"] or loading["unexpected_keys"]:
+        raise ValueError("Checkpoint weights do not match the saved configuration")
+    return model
+
+
 def build(config, tokenizer):
-    if config["model"].get("checkpoint"):
-        model = Orah.from_pretrained(config["model"]["checkpoint"])
+    model_config = config["model"]
+    lora = lora_from_config(model_config)
+    checkpoint = model_config.get("checkpoint")
+    if checkpoint:
+        model = load_checkpoint(checkpoint)
+        model.set_lora(lora)
     else:
-        language_model = AutoModelForCausalLM.from_pretrained(config["model"]["language_model"])
-        vision_config = AutoConfig.from_pretrained(config["model"]["vision_model"])
-        vision_model = (SigLEP.from_pretrained(config["model"]["vision_model"], config=vision_config)
+        language_model = AutoModelForCausalLM.from_pretrained(model_config["language_model"])
+        vision_config = AutoConfig.from_pretrained(model_config["vision_model"])
+        vision_model = (SigLEP.from_pretrained(model_config["vision_model"], config=vision_config)
                         if isinstance(vision_config, SigLEPConfig)
-                        else Siglip2VisionModel.from_pretrained(config["model"]["vision_model"]))
+                        else Siglip2VisionModel.from_pretrained(model_config["vision_model"]))
         orah_config = OrahConfig(
             language_model.config,
             vision_model.config,
             tokenizer.convert_tokens_to_ids(ECG_TOKEN_PLACEHOLDER),
-            num_ecg_tokens=config["model"]["num_ecg_tokens"],
+            num_ecg_tokens=model_config["num_ecg_tokens"],
             segment_length=config["segment_length"],
-            patch_size=config["model"]["patch_size"],
+            patch_size=model_config["patch_size"],
             num_leads=len(config["leads"]),
+            lora=lora,
         )
         model = Orah(orah_config, language_model, vision_model)
-    if config["model"]["peft"] and not isinstance(model.language_model, PeftModel): # if we did peft previous stage.
-        lora_config = LoraConfig(
-            r=config["model"]["lora_rank"], lora_alpha=config["model"]["lora_alpha"],
-            target_modules=config["model"]["target_modules"],
-        )
-        model.language_model = get_peft_model(model.language_model, lora_config)
-        model.language_model.print_trainable_parameters()
     if model.get_input_embeddings().num_embeddings != len(tokenizer):
         model.resize_token_embeddings(len(tokenizer))
-    return model.set_trainable(config["model"].get("trainable", model.config.trainable))
+    model.set_trainable(model_config.get("trainable", model.config.trainable))
+    if isinstance(model.language_model, PeftModel):
+        model.language_model.print_trainable_parameters()
+    return model
 
 OrahConfig.register_for_auto_class()
 Orah.register_for_auto_class("AutoModelForCausalLM")
