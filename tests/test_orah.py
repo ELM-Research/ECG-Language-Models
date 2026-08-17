@@ -52,6 +52,8 @@ def test_build_forward_generate_and_reload(monkeypatch, tmp_path):
     }
 
     model = build_model(config, Tokenizer())
+    assert model.language_model.config._attn_implementation == "sdpa"
+    assert model.encoder.model.config._attn_implementation == "sdpa"
     model.train()
     assert model.config.trainable == ["projector", "language_model"]
     assert not model.encoder.training

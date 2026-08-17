@@ -27,6 +27,9 @@ class OrahConfig(PretrainedConfig):
         self.text_config = text_config if isinstance(text_config, PretrainedConfig) else AutoConfig.for_model(**text_config)
         self.vision_config = (vision_config if isinstance(vision_config, Siglip2VisionConfig)
                               else Siglip2VisionConfig(**vision_config))
+        kwargs.setdefault("attn_implementation", {
+            name: getattr(self, name)._attn_implementation for name in self.sub_configs
+        })
         if min(num_ecg_tokens, segment_length, patch_size, num_leads) < 1 or segment_length % patch_size:
             raise ValueError("ECG dimensions must be positive and segment_length divisible by patch_size")
         self.ecg_token_id = ecg_token_id
@@ -178,9 +181,7 @@ def build(config, tokenizer):
     if config["model"].get("checkpoint"):
         model = Orah.from_pretrained(config["model"]["checkpoint"])
     else:
-        language_model = AutoModelForCausalLM.from_pretrained(config["model"]["language_model"],
-                                                              attn_implementation="sdpa")
-        print("ATTENTION IMPL", language_model.config._attn_implementation)
+        language_model = AutoModelForCausalLM.from_pretrained(config["model"]["language_model"])
         vision_model = Siglip2VisionModel.from_pretrained(config["model"]["vision_model"])
         orah_config = OrahConfig(
             language_model.config,
