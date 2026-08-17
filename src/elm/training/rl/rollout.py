@@ -60,8 +60,7 @@ def rollout_group(
 
     eos_ids = eos_set(model)
     im_end_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
-    if im_end_id is not None and im_end_id != tokenizer.unk_token_id:
-        eos_ids.add(im_end_id)
+    eos_ids.add(im_end_id)
     strip_ids = eos_ids | {int(pad_id)}
 
     labels = batch["labels"][item_idx]
@@ -91,15 +90,13 @@ def rollout_group(
                 max_new_tokens=config["max_new_tokens"],
                 do_sample=True,
                 temperature=config["temperature"],
-                top_p=1.0,
-                top_k=0,
                 eos_token_id=sorted(eos_ids),
                 pad_token_id=pad_id,
             )
 
         includes_prompt = gen.shape[1] >= pL and torch.equal(gen[0, :pL], prompt_ids)
         new_tokens = gen[:, pL:] if includes_prompt else gen
-        if new_tokens.shape[1] == 0:                                 # pathological: nothing generated
+        if new_tokens.shape[1] == 0:
             new_tokens = torch.full((group_size, 1), pad_id, dtype=torch.long, device=device)
 
         resp_mask = trim_mask(new_tokens, eos_ids, pad_id)

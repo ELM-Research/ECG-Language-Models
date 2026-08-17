@@ -7,7 +7,8 @@ from elm.training.supervised import train_epoch as train_supervised_epoch
 from elm.utils.logging import cleanup_wandb, setup_experiment_folder, setup_wandb
 from elm.utils.parallelism import cleanup, init_dist, is_main, setup_model
 from elm.utils.seed import set_seed
-
+import torch
+torch.set_float32_matmul_precision("high")
 RUNS_DIR = "./src/runs"
 
 

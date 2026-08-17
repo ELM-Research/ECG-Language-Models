@@ -178,7 +178,8 @@ def build(config, tokenizer):
     if config["model"].get("checkpoint"):
         model = Orah.from_pretrained(config["model"]["checkpoint"])
     else:
-        language_model = AutoModelForCausalLM.from_pretrained(config["model"]["language_model"])
+        language_model = AutoModelForCausalLM.from_pretrained(config["model"]["language_model"],
+                                                              attn_implementation="sdpa")
         print("ATTENTION IMPL", language_model.config._attn_implementation)
         vision_model = Siglip2VisionModel.from_pretrained(config["model"]["vision_model"])
         orah_config = OrahConfig(

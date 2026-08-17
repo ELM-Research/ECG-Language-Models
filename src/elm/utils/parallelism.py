@@ -10,7 +10,6 @@ from torch.distributed.fsdp import (
 )
 from torch.distributed.tensor import DTensor
 
-
 def cleanup():
     if distributed.is_initialized():
         try:
