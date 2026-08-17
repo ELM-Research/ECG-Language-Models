@@ -1,4 +1,3 @@
-"""Group rollout: per-prompt, sample G trajectories, score, build tensors for policy-loss computation."""
 import torch
 
 from elm.training.rl.rewards import reward_components
@@ -11,7 +10,6 @@ def eos_set(model) -> set:
 
 
 def trim_mask(new_tokens: torch.Tensor, eos_ids: set, pad_id: int | None = None) -> torch.Tensor:
-    """Mask tokens through the first EOS, excluding later EOS and padding."""
     is_eos = torch.zeros_like(new_tokens, dtype=torch.bool)
     for eos_id in eos_ids:
         is_eos |= new_tokens == eos_id
