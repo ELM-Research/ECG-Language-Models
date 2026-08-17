@@ -1,14 +1,15 @@
 seed: 0
-development: true
-wandb: false
+development: false
+wandb: true
 
 gpu:
-  strategy: null # null for one device, fsdp2 for multiple devices
+  strategy: fsdp2 # null for one device, fsdp2 for multiple devices
 
 training:
   epochs: 1
   gradient_accumulation_steps: 1
   max_grad_norm: 1.0
+  num_workers: 16
   save_steps: 500
 
 optimizer:
@@ -60,8 +61,8 @@ model:
   num_ecg_tokens: 100
   patch_size: 25
   trainable: [projector, language_model]
-  language_model: Qwen/Qwen3.5-0.8B-Base
-  peft: false
+  language_model: Qwen/Qwen3.5-4B-Base
+  peft: true
   lora_rank: 16
   lora_alpha: 32
   target_modules: all-linear

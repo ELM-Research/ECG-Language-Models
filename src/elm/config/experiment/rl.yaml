@@ -1,5 +1,5 @@
 defaults:
-  - ../qwen3.5-4b-muon.yaml
+  - ../common.yaml
 
 training:
   training_stage: rl

@@ -1,6 +1,0 @@
-defaults:
-  - _sft_stage2.yaml
-
-data:
-  data_names: [ELM-Research/sft-stage2-ptbxl-noaug-filtered]
-  split_names: [fold1_train]
