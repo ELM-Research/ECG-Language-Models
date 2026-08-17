@@ -55,7 +55,6 @@ system_prompt_path: src/elm/config/system_prompts/think.txt
 model:
   name: orah
   checkpoint: null
-  # vision_model: google/siglip2-base-patch16-naflex
   vision_model: /p01/whan/ecg_encoder/src/runs/pretrain/siglip2-base-patch16-naflex/2/hf_converted
   truncation_length: 1024
   num_ecg_tokens: 100

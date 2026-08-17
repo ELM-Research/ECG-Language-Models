@@ -1,6 +1,12 @@
 import torch
 from torch import nn
-from transformers import AutoConfig, AutoModel, PreTrainedModel, Siglip2VisionConfig, Siglip2VisionModel
+from transformers import (
+    AutoConfig,
+    AutoModel,
+    PreTrainedModel,
+    Siglip2VisionConfig,
+    Siglip2VisionModel
+)
 
 
 class SigLEPConfig(Siglip2VisionConfig):
