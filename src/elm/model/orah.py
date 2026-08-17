@@ -10,6 +10,7 @@ from transformers import (
     Siglip2VisionConfig,
     Siglip2VisionModel,
 )
+from elm.model.siglep import SigLEP, SigLEPConfig
 from elm.utils.constants import ECG_TOKEN_PLACEHOLDER
 
 class OrahConfig(PretrainedConfig):
@@ -41,46 +42,6 @@ class OrahConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class ECGEmbedding(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.patch_embedding = nn.Linear(config.num_leads * config.patch_size, config.vision_config.hidden_size)
-        self.position_embedding = nn.Embedding(config.segment_length // config.patch_size, config.vision_config.hidden_size)
-
-    def forward(self, patches, spatial_shapes=None):
-        positions = torch.arange(patches.shape[1], device=patches.device)
-        return self.patch_embedding(patches) + self.position_embedding(positions)[None]
-
-
-class SigLEP(nn.Module):
-    def __init__(self, vision_model, config):
-        super().__init__()
-        self.model = vision_model
-        backbone = getattr(vision_model, "vision_model", vision_model)
-        backbone.embeddings = ECGEmbedding(config)
-        backbone.use_head = False
-        backbone.head = None
-        self.shape = (config.num_leads, config.segment_length)
-        self.patch_size = config.patch_size
-        self.pool = nn.AdaptiveAvgPool1d(config.num_ecg_tokens)
-
-    def forward(self, ecg_values):
-        if tuple(ecg_values.shape[1:]) != self.shape:
-            raise ValueError(f"Expected ECG shape (batch, {self.shape[0]}, {self.shape[1]}), got {tuple(ecg_values.shape)}")
-        embeddings = getattr(self.model, "vision_model", self.model).embeddings
-        ecg_values = ecg_values.to(embeddings.patch_embedding.weight)
-        low = ecg_values.amin((-2, -1), keepdim=True)
-        ecg_values = (ecg_values - low) / (ecg_values.amax((-2, -1), keepdim=True) - low + 1e-6)
-        patches = ecg_values.unfold(-1, self.patch_size, self.patch_size).transpose(1, 2).flatten(2)
-        batch, length = patches.shape[:2]
-        output = self.model(
-            pixel_values=patches,
-            pixel_attention_mask=torch.ones((batch, length), dtype=torch.long, device=patches.device),
-            spatial_shapes=torch.zeros((batch, 2), dtype=torch.long, device=patches.device),
-        ).last_hidden_state
-        return self.pool(output.transpose(1, 2)).transpose(1, 2)
-
-
 class Orah(PreTrainedModel, GenerationMixin):
     # HuggingFace Pretrained Config Variables
     config_class = OrahConfig
@@ -90,8 +51,21 @@ class Orah(PreTrainedModel, GenerationMixin):
     def __init__(self, config, language_model=None, vision_model=None):
         super().__init__(config)
         self.language_model = language_model or AutoModelForCausalLM.from_config(config.text_config)
-        vision_model = vision_model or Siglip2VisionModel(config.vision_config)
-        self.encoder = SigLEP(vision_model, config)
+        if isinstance(vision_model, SigLEP):
+            dimensions = (config.num_ecg_tokens, config.segment_length, config.patch_size, config.num_leads)
+            encoder_dimensions = tuple(getattr(vision_model.config, name) for name in (
+                "num_ecg_tokens", "segment_length", "patch_size", "num_leads"))
+            if dimensions != encoder_dimensions:
+                raise ValueError(f"SigLEP dimensions {encoder_dimensions} do not match Orah dimensions {dimensions}")
+            self.encoder = vision_model
+        else:
+            encoder_config = SigLEPConfig(**(config.vision_config.to_dict() | {
+                "num_ecg_tokens": config.num_ecg_tokens,
+                "segment_length": config.segment_length,
+                "patch_size": config.patch_size,
+                "num_leads": config.num_leads,
+            }))
+            self.encoder = SigLEP(encoder_config, vision_model)
         self.projector = nn.Sequential(
             nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size),
             nn.GELU(),
@@ -182,7 +156,10 @@ def build(config, tokenizer):
         model = Orah.from_pretrained(config["model"]["checkpoint"])
     else:
         language_model = AutoModelForCausalLM.from_pretrained(config["model"]["language_model"])
-        vision_model = Siglip2VisionModel.from_pretrained(config["model"]["vision_model"])
+        vision_config = AutoConfig.from_pretrained(config["model"]["vision_model"])
+        vision_model = (SigLEP.from_pretrained(config["model"]["vision_model"], config=vision_config)
+                        if isinstance(vision_config, SigLEPConfig)
+                        else Siglip2VisionModel.from_pretrained(config["model"]["vision_model"]))
         orah_config = OrahConfig(
             language_model.config,
             vision_model.config,
