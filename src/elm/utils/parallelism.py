@@ -67,14 +67,15 @@ def setup_model(model: torch.nn.Module, strategy: str | None) -> torch.nn.Module
     if strategy is None:
         return model.to(get_device())
 
-    # Uniform FP32 originals satisfy FSDP2 and remain the optimizer's sharded master weights.
+    # uniform FP32 originals satisfy FSDP2 and remain the optimizer's sharded master weights.
     model.float()
     mp_policy = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.float32)
     block_names = {name for module in model.modules()
                    for name in (getattr(module, "_no_split_modules", None) or ())}
     for module in reversed(list(model.modules())):
         if type(module).__name__ in block_names:
-            fully_shard(module, mp_policy=mp_policy)
+            fully_shard(module, mp_policy=mp_policy,
+                        reshard_after_forward=False)
     model = fully_shard(model, mp_policy=mp_policy)
     if hasattr(model, "generate"):
         register_fsdp_forward_method(model, "generate")
