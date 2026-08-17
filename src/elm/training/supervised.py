@@ -21,7 +21,8 @@ def train_epoch(model, optimizer, dataloader, config: dict, epoch: int) -> dict:
         update = step + 1 == window_start + window_size
         set_gradient_sync(model, update)
 
-        loss = model(**move_to_device(batch, device)).loss
+        loss = model(**move_to_device(batch, device),
+                     use_cache=False).loss # use_cache=True is default for qwen3.5
         (loss / window_size).backward()
         loss_value = loss.detach().item()
         total_loss += loss_value
