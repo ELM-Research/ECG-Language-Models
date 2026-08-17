@@ -17,8 +17,9 @@ def main():
     init_dist(strategy)
 
     try:
-        if not config["development"] and is_main():
-            setup_experiment_folder(f"{RUNS_DIR}/{exp_name}", config)
+        if is_main():
+            if not config["development"]:
+                setup_experiment_folder(f"{RUNS_DIR}/{exp_name}", config)
             if config["wandb"]:
                 setup_wandb(config, name=exp_name)
 
