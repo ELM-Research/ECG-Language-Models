@@ -106,14 +106,15 @@ def rollout_group(
 
         resp_mask = trim_mask(new_tokens, eos_ids, pad_id)
 
-        rewards = torch.tensor([
-            sum(reward_components(
+        components = [
+            reward_components(
                 _decode_for_reward(tokenizer, new_tokens[i][resp_mask[i].bool()], strip_ids),
                 gt_text,
                 explicit_thinking,
-            ).values())
+            )
             for i in range(group_size)
-        ], dtype=torch.float32, device=device)
+        ]
+        rewards = torch.tensor([sum(x.values()) for x in components], dtype=torch.float32, device=device)
         reward_std = rewards.std(unbiased=False)
         # All G samples scored identically: group-relative advantage is pure
         # 1e-6-scaled noise. Flag so the trainer can skip this prompt.
@@ -134,7 +135,8 @@ def rollout_group(
         "full_ids": full_ids, "full_attn": full_attn,
         "ecg_values": pb["ecg_values"],
         "response_mask": resp_mask, "advantages": adv, "old_log_prob": old_lp, "pL": pL,
-        "mean_reward": rewards.mean().item(), "degenerate": degenerate,
+        "rewards": {name: sum(x[name] for x in components) / group_size for name in components[0]},
+        "degenerate": degenerate,
         "temperature": config["temperature"],
     }
 

@@ -9,11 +9,6 @@ training:
 gpu:
   strategy: fsdp2
 
-optimizer:
-  name: muon
-  learning_rate: 1.0e-3
-  weight_decay: 0.05
-
 data:
   data_names: # yaml list
     - ELM-Research/rl-stage1-noaug
