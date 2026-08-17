@@ -2,7 +2,12 @@ import os
 
 import torch
 from torch import distributed
-from torch.distributed.fsdp import FSDPModule, fully_shard, register_fsdp_forward_method
+from torch.distributed.fsdp import (
+    FSDPModule,
+    MixedPrecisionPolicy,
+    fully_shard,
+    register_fsdp_forward_method,
+)
 from torch.distributed.tensor import DTensor
 
 
@@ -17,6 +22,8 @@ def cleanup():
 def init_dist(strategy: str | None) -> None:
     if strategy is None:
         return
+    if strategy != "fsdp2":
+        raise ValueError(f"Unknown distributed strategy: {strategy}")
     device = torch.device("cuda", get_local_rank())
     torch.cuda.set_device(device)
     distributed.init_process_group(device_id=device)
@@ -61,12 +68,15 @@ def setup_model(model: torch.nn.Module, strategy: str | None) -> torch.nn.Module
     if strategy is None:
         return model.to(get_device())
 
+    # Uniform FP32 originals satisfy FSDP2 and remain the optimizer's sharded master weights.
+    model.float()
+    mp_policy = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.float32)
     block_names = {name for module in model.modules()
                    for name in (getattr(module, "_no_split_modules", None) or ())}
     for module in reversed(list(model.modules())):
         if type(module).__name__ in block_names:
-            fully_shard(module)
-    model = fully_shard(model)
+            fully_shard(module, mp_policy=mp_policy)
+    model = fully_shard(model, mp_policy=mp_policy)
     if hasattr(model, "generate"):
         register_fsdp_forward_method(model, "generate")
     print_parallelism(model)
@@ -80,8 +90,13 @@ def get_device() -> torch.device:
 def print_parallelism(model: torch.nn.Module) -> None:
     parameters = list(model.parameters())
     sharded = [parameter for parameter in parameters if isinstance(parameter, DTensor)]
+    if len(sharded) != len(parameters):
+        raise RuntimeError(f"FSDP2 left {len(parameters) - len(sharded)} parameter tensors unsharded")
+    if {parameter.dtype for parameter in sharded} != {torch.float32}:
+        raise RuntimeError("FSDP2 optimizer parameters must all be float32")
     groups = sum(isinstance(module, FSDPModule) for module in model.modules())
     status = (f"{groups} groups, {len(sharded)}/{len(parameters)} parameter tensors sharded, "
               f"{sum(p.to_local().numel() for p in sharded):,}/"
-              f"{sum(p.numel() for p in sharded):,} elements local")
+              f"{sum(p.numel() for p in sharded):,} elements local; "
+              "fp32 shards, bf16 compute, fp32 reduce")
     print(f"[rank {get_rank()}/{get_world_size()}] fsdp2 on {parameters[0].device}: {status}", flush=True)

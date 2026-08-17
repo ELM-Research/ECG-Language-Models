@@ -21,6 +21,6 @@ rl:
   group_size: 4
   updates_per_rollout: 2
   max_new_tokens: 512
+  temperature: 1.0
   tau_pos: 1.0
   tau_neg: 1.05
-  loss_aggregation: seq-mean-token-mean

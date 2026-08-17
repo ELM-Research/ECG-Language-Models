@@ -1,38 +1,17 @@
 import torch
 
-from elm.training.rl.common_funcs import agg_loss
-
 
 def compute_policy_loss_sapo(
     old_log_prob: torch.Tensor,
     log_prob: torch.Tensor,
     advantages: torch.Tensor,
     response_mask: torch.Tensor,
-    loss_agg_mode: str = "seq-mean-token-mean",
-    rollout_is_weights: torch.Tensor | None = None,
     tau_pos: float = 1.0,
     tau_neg: float = 1.05,
-    global_batch_size: int = None,
+    global_batch_size: int | None = None,
     dp_size: int = 1,
 ) -> torch.Tensor:
-    """
-    Compute the smoothed policy objective for SAPO.
-
-    See https://arxiv.org/pdf/2511.20347 for more details.
-
-    Args:
-        old_log_prob (torch.Tensor):
-            Log-probabilities of actions under the old policy, shape (batch_size, response_length).
-        log_prob (torch.Tensor):
-            Log-probabilities of actions under the current policy, shape (batch_size, response_length).
-        advantages (torch.Tensor):
-            Advantage estimates for each action, shape (batch_size, response_length).
-        response_mask (torch.Tensor):
-            Mask indicating which tokens to include in the loss, shape (batch_size, response_length).
-        loss_agg_mode (str, optional):
-            Aggregation mode for `agg_loss`. For SAPO, it is recommended to use "seq-mean-token-mean".
-    """
-
+    """Compute the sequence-mean/token-mean SAPO policy loss."""
     if tau_pos <= 0 or tau_neg <= 0:
         raise ValueError(f"tau_pos and tau_neg must be > 0, got tau_pos={tau_pos}, tau_neg={tau_neg}")
     tau_pos = torch.as_tensor(tau_pos, dtype=advantages.dtype, device=advantages.device)
@@ -41,26 +20,11 @@ def compute_policy_loss_sapo(
     negative_approx_kl = (log_prob - old_log_prob).clamp(min=-20.0, max=20.0)
     ratio = negative_approx_kl.exp()
 
-    # tau_{i,t} is tau_pos if adv > 0 else tau_neg
-    taus = torch.where(
-        condition=advantages > 0,
-        input=tau_pos,  # if A_{i,t} > 0 we set to tau_pos
-        other=tau_neg,  # if A_{i,t} <= 0 we set to tau_neg
-    )
-
-    # compute the gates f_{i,t}(r_{i,t}(θ)) at token level
+    taus = torch.where(advantages > 0, tau_pos, tau_neg)
     gate_probs = torch.sigmoid(taus * (ratio - 1.0))
     gates = gate_probs * (4.0 / taus)
-
-    # compute policy gradient loss
     pg_losses = -gates * advantages
-
-    # Apply rollout correction weights if provided
-    if rollout_is_weights is not None:
-        pg_losses = pg_losses * rollout_is_weights
-
-    # for SAPO, we need to aggregate the loss at the sequence level (seq-mean-token-mean)
-    return agg_loss(
-        loss_mat=pg_losses, loss_mask=response_mask,
-        loss_agg_mode=loss_agg_mode, global_batch_size=global_batch_size, dp_size=dp_size,
-    )
+    token_counts = response_mask.sum(dim=-1)
+    sequence_losses = (pg_losses * response_mask).sum(dim=-1) / (token_counts + 1e-8)
+    global_batch_size = (token_counts > 0).sum() if global_batch_size is None else global_batch_size
+    return sequence_losses.sum() * dp_size / global_batch_size

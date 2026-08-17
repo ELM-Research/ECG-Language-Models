@@ -16,8 +16,9 @@ from elm.utils.parallelism import (
 def train_epoch(model, optimizer, dataloader, tokenizer, config: dict, epoch: int) -> dict:
     training, rl = config["training"], config["rl"]
     accumulation_steps = training["gradient_accumulation_steps"]
-    if accumulation_steps < 1 or rl["group_size"] < 2 or rl["updates_per_rollout"] < 1:
-        raise ValueError("Invalid gradient accumulation, group size, or rollout update count")
+    if (accumulation_steps < 1 or rl["group_size"] < 2 or
+            rl["updates_per_rollout"] < 1 or rl["temperature"] <= 0):
+        raise ValueError("Invalid gradient accumulation, group size, rollout update count, or temperature")
 
     device = begin_epoch(model, dataloader, epoch)
     progress = tqdm(dataloader, desc=f"RL epoch {epoch + 1}", disable=not is_main(), leave=False)
@@ -54,7 +55,6 @@ def train_epoch(model, optimizer, dataloader, tokenizer, config: dict, epoch: in
                         dp_size=world_size,
                         tau_pos=rl["tau_pos"],
                         tau_neg=rl["tau_neg"],
-                        loss_agg_mode=rl["loss_aggregation"],
                     )
                     valid = not rollout["degenerate"]
                     (loss * valid).backward()

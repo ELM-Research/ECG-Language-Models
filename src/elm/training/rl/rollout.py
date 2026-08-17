@@ -11,21 +11,13 @@ def _eos_set(model) -> set:
 
 
 def _trim_mask(new_tokens: torch.Tensor, eos_ids: set, pad_id: int | None = None) -> torch.Tensor:
-    """Return (G, L) mask = 1 up to and including first EOS per row, 0 after.
-
-    Also zeros pad positions so a row that never emits an EOS (ran to
-    max_new_tokens) cannot leak right-padding into the policy loss.
-    """
-    G, L = new_tokens.shape
-    mask = torch.ones(G, L, dtype=torch.float32, device=new_tokens.device)
-    toks = new_tokens.tolist()
-    for i in range(G):
-        for j in range(L):
-            if toks[i][j] in eos_ids:
-                mask[i, j + 1:] = 0
-                break
+    """Mask tokens through the first EOS, excluding later EOS and padding."""
+    is_eos = torch.zeros_like(new_tokens, dtype=torch.bool)
+    for eos_id in eos_ids:
+        is_eos |= new_tokens == eos_id
+    mask = is_eos.cumsum(dim=1) - is_eos.long() == 0
     if pad_id is not None and pad_id not in eos_ids:
-        mask *= (new_tokens != pad_id).float()
+        mask &= new_tokens != pad_id
     return mask
 
 
@@ -35,15 +27,22 @@ def _decode_for_reward(tokenizer, ids: torch.Tensor, strip_ids: set) -> str:
 
 
 def _log_prob_at_response(model, ids, attn, ecg, pL: int, temperature: float) -> torch.Tensor:
+    targets = ids[:, pL:]
     was_training = model.training
     model.eval()
     try:
-        out = model(input_ids=ids, attention_mask=attn, ecg_values=ecg)
+        out = model(
+            input_ids=ids,
+            attention_mask=attn,
+            ecg_values=ecg,
+            logits_to_keep=targets.shape[1] + 1,
+            use_cache=False,
+        )
     finally:
         model.train(was_training)
-    targets = ids[:, pL:]
-    logits = out.logits[:, pL - 1:-1, :] / temperature
-    return torch.log_softmax(logits.float(), dim=-1).gather(-1, targets.unsqueeze(-1)).squeeze(-1)
+    logits = out.logits[:, -targets.shape[1] - 1:-1].float() / temperature
+    selected = logits.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
+    return selected - logits.logsumexp(dim=-1)
 
 
 def rollout_group(
@@ -62,6 +61,9 @@ def rollout_group(
         raise ValueError("RL requires a tokenizer pad token")
 
     eos_ids = _eos_set(model)
+    im_end_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
+    if im_end_id is not None and im_end_id != tokenizer.unk_token_id:
+        eos_ids.add(im_end_id)
     strip_ids = eos_ids | {int(pad_id)}
 
     labels = batch["labels"][item_idx]
@@ -90,9 +92,15 @@ def rollout_group(
                 **pb,
                 max_new_tokens=config["max_new_tokens"],
                 do_sample=True,
+                temperature=config["temperature"],
+                top_p=1.0,
+                top_k=0,
+                eos_token_id=sorted(eos_ids),
+                pad_token_id=pad_id,
             )
 
-        new_tokens = gen[:, pL:] if gen.shape[1] > pL and torch.equal(gen[0, :pL], prompt_ids) else gen
+        includes_prompt = gen.shape[1] >= pL and torch.equal(gen[0, :pL], prompt_ids)
+        new_tokens = gen[:, pL:] if includes_prompt else gen
         if new_tokens.shape[1] == 0:                                 # pathological: nothing generated
             new_tokens = torch.full((group_size, 1), pad_id, dtype=torch.long, device=device)
 
