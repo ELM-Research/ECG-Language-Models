@@ -1,0 +1,29 @@
+defaults:
+  - ../qwen3.5-4b-muon.yaml
+
+training:
+  training_stage: rl
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  num_workers: 8
+  epochs: 3
+
+optimizer:
+  learning_rate: 5.0e-6
+  weight_decay: 0.01
+
+model:
+  checkpoint: src/runs/sft_stage2/0/checkpoints/epoch_best
+  trainable: [language_model]
+
+data:
+  data_names: [ELM-Research/rl-ecg-r1-filtered]
+  split_names: [fold1_train]
+
+rl:
+  group_size: 16
+  updates_per_rollout: 1
+  max_new_tokens: 1024
+  temperature: 0.9
+  tau_pos: 1.0
+  tau_neg: 1.05

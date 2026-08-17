@@ -1,0 +1,19 @@
+defaults:
+  - ../qwen3.5-4b-muon.yaml
+
+training:
+  training_stage: pretrain
+  batch_size: 16
+  gradient_accumulation_steps: 1
+  epochs: 10
+
+optimizer:
+  learning_rate: 5.0e-4
+
+model:
+  trainable: [projector]
+  peft: false
+
+data:
+  data_names: [ELM-Research/pretrain-stage1]
+  split_names: [fold1_train]

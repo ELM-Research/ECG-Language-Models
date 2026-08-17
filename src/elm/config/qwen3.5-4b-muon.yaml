@@ -1,0 +1,15 @@
+defaults:
+  - common.yaml
+
+development: false
+wandb: true
+
+gpu:
+  strategy: fsdp2
+
+training:
+  num_workers: 16
+
+model:
+  language_model: Qwen/Qwen3.5-4B-Base
+  peft: true

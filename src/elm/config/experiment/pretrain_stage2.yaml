@@ -1,0 +1,19 @@
+defaults:
+  - ../qwen3.5-4b-muon.yaml
+
+training:
+  training_stage: pretrain
+  batch_size: 16
+  gradient_accumulation_steps: 2
+  epochs: 3
+
+optimizer:
+  learning_rate: 2.0e-4
+
+model:
+  checkpoint: src/runs/pretrain_stage1/0/checkpoints/epoch_best
+  trainable: [projector, language_model]
+
+data:
+  data_names: [ELM-Research/pretrain-stage2]
+  split_names: [fold1_train]
