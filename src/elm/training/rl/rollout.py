@@ -4,13 +4,13 @@ import torch
 from elm.training.rl.rewards import reward_components
 
 
-def _eos_set(model) -> set:
+def eos_set(model) -> set:
     generation_model = getattr(model, "language_model", model)
     eos = generation_model.generation_config.eos_token_id
     return {eos} if isinstance(eos, int) else set(eos or ())
 
 
-def _trim_mask(new_tokens: torch.Tensor, eos_ids: set, pad_id: int | None = None) -> torch.Tensor:
+def trim_mask(new_tokens: torch.Tensor, eos_ids: set, pad_id: int | None = None) -> torch.Tensor:
     """Mask tokens through the first EOS, excluding later EOS and padding."""
     is_eos = torch.zeros_like(new_tokens, dtype=torch.bool)
     for eos_id in eos_ids:
@@ -26,7 +26,7 @@ def _decode_for_reward(tokenizer, ids: torch.Tensor, strip_ids: set) -> str:
     return tokenizer.decode(kept, skip_special_tokens=False).strip()
 
 
-def _log_prob_at_response(model, ids, attn, ecg, pL: int, temperature: float) -> torch.Tensor:
+def log_prob_at_response(model, ids, attn, ecg, pL: int, temperature: float) -> torch.Tensor:
     targets = ids[:, pL:]
     was_training = model.training
     model.eval()
@@ -60,7 +60,7 @@ def rollout_group(
     if pad_id is None:
         raise ValueError("RL requires a tokenizer pad token")
 
-    eos_ids = _eos_set(model)
+    eos_ids = eos_set(model)
     im_end_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
     if im_end_id is not None and im_end_id != tokenizer.unk_token_id:
         eos_ids.add(im_end_id)
@@ -104,7 +104,7 @@ def rollout_group(
         if new_tokens.shape[1] == 0:                                 # pathological: nothing generated
             new_tokens = torch.full((group_size, 1), pad_id, dtype=torch.long, device=device)
 
-        resp_mask = _trim_mask(new_tokens, eos_ids, pad_id)
+        resp_mask = trim_mask(new_tokens, eos_ids, pad_id)
 
         rewards = torch.tensor([
             sum(reward_components(
@@ -124,7 +124,7 @@ def rollout_group(
         full_attn = torch.cat([pb["attention_mask"], resp_mask], dim=1)
 
         with torch.no_grad():
-            old_lp = _log_prob_at_response(
+            old_lp = log_prob_at_response(
                 model, full_ids, full_attn, pb["ecg_values"], pL, config["temperature"])
     finally:
         if was_training:
@@ -140,4 +140,4 @@ def rollout_group(
 
 
 def current_log_prob(model, ro: dict) -> torch.Tensor:
-    return _log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["ecg_values"], ro["pL"], ro["temperature"])
+    return log_prob_at_response(model, ro["full_ids"], ro["full_attn"], ro["ecg_values"], ro["pL"], ro["temperature"])

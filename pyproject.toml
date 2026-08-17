@@ -39,6 +39,7 @@ dependencies = [
     "huggingface-hub>=1.19.0",
     "flash-linear-attention[cuda]==0.5.1",
     "pyyaml>=6.0.3",
+    "causal-conv1d>=1.6.2.post1",
 ]
 
 [tool.ruff.lint]
@@ -46,6 +47,10 @@ select = ["ALL"]
 
 [tool.uv]
 override-dependencies = ["triton==3.3.1"]
+
+[[tool.uv.index]]
+name = "astral-cu128"
+url = "https://wheels.astral.sh/simple/cu128/"
 
 [build-system]
 requires = ["setuptools>=77"]
@@ -56,6 +61,7 @@ ecg_byte = ["bpe==0.0.1"]
 
 [tool.uv.sources]
 bpe = { path = "src/elm/data/modality/bpe", editable = true }
+causal-conv1d = { index = "astral-cu128" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
