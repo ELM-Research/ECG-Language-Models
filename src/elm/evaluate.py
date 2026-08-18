@@ -9,7 +9,6 @@ from elm.config.load import get_config
 from elm.data.build import build_data
 from elm.evaluation.evaluator import evaluate, run_statistical_analysis, save_run
 from elm.model import build_model
-from elm.utils.logging import setup_experiment_folder
 from elm.utils.parallelism import setup_model
 from elm.utils.seed import set_seed
 
@@ -24,14 +23,20 @@ def fold_config(config: dict, fold) -> dict:
     return configured
 
 def main() -> None:
-    config, experiment_name = get_config()
+    config, _ = get_config()
     folds, seeds = config["evaluation"]["folds"], config["evaluation"]["seeds"]
-    run_dir = setup_experiment_folder(
-        Path(config["evaluation"]["output_dir"]) / experiment_name, config)
 
     run_summaries = []
+    output_dirs = set()
     for fold in folds:
         current = fold_config(config, fold)
+        checkpoint = current["model"].get("checkpoint")
+        if checkpoint:
+            run_dir = Path(checkpoint)
+        else:
+            run_dir = Path(current["evaluation"]["output_dir"]) / "zero_shot"
+            run_dir.mkdir(parents=True, exist_ok=True)
+        output_dirs.add(run_dir)
         set_seed(seeds[0])
         tokenizer, dataset = build_data(current, training=False)
         model = setup_model(build_model(current, tokenizer), None)
@@ -52,10 +57,11 @@ def main() -> None:
             torch.cuda.empty_cache()
 
     summary = {"runs": run_summaries, "aggregate": run_statistical_analysis(run_summaries)}
-    summary_path = run_dir / "summary.json"
-    with summary_path.open("w") as file:
-        json.dump(summary, file, indent=2)
-    print(f"Saved evaluation results to {summary_path}")
+    for output_dir in output_dirs:
+        summary_path = output_dir / "summary.json"
+        with summary_path.open("w") as file:
+            json.dump(summary, file, indent=2)
+        print(f"Saved evaluation results to {summary_path}")
 
 
 if __name__ == "__main__":
