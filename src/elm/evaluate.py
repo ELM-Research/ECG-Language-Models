@@ -24,30 +24,9 @@ def fold_config(config: dict, fold) -> dict:
         configured["model"]["checkpoint"] = checkpoint.format(fold=fold)
     return configured
 
-
-def validate_evaluation(config: dict) -> tuple[list, list]:
-    evaluation = config["evaluation"]
-    folds, seeds = evaluation["folds"], evaluation["seeds"]
-    if not folds or not seeds:
-        raise ValueError("evaluation.folds and evaluation.seeds cannot be empty")
-    if len(evaluation["split_names"]) != len(config["data"]["data_names"]):
-        raise ValueError("evaluation.split_names must match data.data_names")
-    if len(set(folds)) != len(folds) or len(set(seeds)) != len(seeds):
-        raise ValueError("evaluation.folds and evaluation.seeds must be unique")
-    if any(not isinstance(seed, int) for seed in seeds):
-        raise ValueError("evaluation.seeds must be integers")
-    if evaluation["batch_size"] < 1 or evaluation["num_workers"] < 0 or evaluation["max_new_tokens"] < 1:
-        raise ValueError("Invalid evaluation batch size, worker count, or generation length")
-    if evaluation["do_sample"] and evaluation.get("temperature", 1.0) <= 0:
-        raise ValueError("evaluation.temperature must be positive")
-    return folds, seeds
-
-
 def main() -> None:
-    if int(os.environ.get("WORLD_SIZE", 1)) != 1:
-        raise RuntimeError("Evaluation supports exactly one process and one device")
     config, experiment_name = get_config()
-    folds, seeds = validate_evaluation(config)
+    folds, seeds = config["evaluation"]["folds"], config["evaluation"]["seeds"] 
     run_dir = setup_experiment_folder(
         Path(config["evaluation"]["output_dir"]) / experiment_name, config)
 
