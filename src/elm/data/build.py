@@ -17,10 +17,9 @@ class DataBuilder:
         self.llm_tokenizer_name = model["language_model"]
         self.truncation_length = model["truncation_length"]
         self.num_ecg_tokens = model["num_ecg_tokens"]
-        self.batch_size = runtime["batch_size"]
+        self.batch_size = training_config["batch_size"] if training else 1
         self.num_workers = runtime["num_workers"]
         self.training_stage = training_config["training_stage"]
-        self.enable_thinking = config["enable_thinking"]
         self.system_prompt_path = config["system_prompt_path"]
         self.modality = config["modality"]
         self.seed = config["seed"]
@@ -51,7 +50,7 @@ class DataBuilder:
         )
 
     def get_torch_dataloader_sampler(self, torch_dataset,):
-        if get_world_size() > 1:
+        if self.is_training and get_world_size() > 1:
             return DistributedSampler(torch_dataset, num_replicas=get_world_size(),
                                       rank=get_rank(), seed=self.seed, shuffle=True)
         return None
@@ -68,8 +67,7 @@ class DataBuilder:
         text_preparer = Text(llm_tokenizer,
                              self.truncation_length,
                              self.training_stage,
-                             self.enable_thinking,
-                             self.system_prompt_path)
+                             system_prompt_path=self.system_prompt_path)
         ecg_modality_preparer = self.build_ecg_modality()
         torch_dataset = ELMDataset(data, ecg_modality_preparer, text_preparer,
                              augmentation = self.augmentation,

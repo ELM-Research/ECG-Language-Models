@@ -16,7 +16,6 @@ evaluation:
   folds: [1]
   seeds: [0]
   split_names: ["fold{fold}_test"]
-  batch_size: 1
   num_workers: 0
   max_new_tokens: 512
   do_sample: false

@@ -14,8 +14,6 @@ from nltk.translate.meteor_score import meteor_score
 from rouge_score.rouge_scorer import RougeScorer
 from tqdm import tqdm
 
-from elm.training.common import move_to_device
-
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -31,7 +29,12 @@ def split_response(text: str) -> tuple[str, str]:
     thinking = THINK_RE.search(text)
     answer = ANSWER_RE.search(text)
     thinking_text = thinking.group(1).strip() if thinking else ""
-    answer_text = answer.group(1) if answer else text[thinking.end():] if thinking else text
+    if answer:
+        answer_text = answer.group(1)
+    elif thinking:
+        answer_text = text[thinking.end():]
+    else:
+        answer_text = text
     return thinking_text, answer_text.strip()
 
 
@@ -98,28 +101,37 @@ def classification_metrics(references: list[str], hypotheses: list[str]) -> tupl
 
 
 def response_ranges(labels: torch.Tensor) -> list[tuple[int, int]]:
-    active = labels.ne(-100)
-    padded = torch.nn.functional.pad(active, (1, 1))
-    edges = padded[1:].to(torch.int8) - padded[:-1].to(torch.int8)
-    starts = edges.eq(1).nonzero(as_tuple=True)[0].tolist()
-    ends = edges.eq(-1).nonzero(as_tuple=True)[0].tolist()
-    return list(zip(starts, ends))
+    indices = labels.ne(-100).nonzero(as_tuple=True)[0].tolist()
+    if not indices:
+        return []
+
+    ranges = []
+    start = previous = indices[0]
+    for index in indices[1:]:
+        if index != previous + 1:
+            ranges.append((start, previous + 1))
+            start = index
+        previous = index
+    ranges.append((start, previous + 1))
+    return ranges
 
 
-def build_jobs(batch: dict, tokenizer) -> list[dict]:
+def prepare_evaluation(batch: dict, tokenizer) -> list[dict]:
     jobs = []
-    for item in range(batch["input_ids"].shape[0]):
-        for start, end in response_ranges(batch["labels"][item]):
-            prompt_ids = batch["input_ids"][item, :start]
-            job = {
-                "input_ids": prompt_ids.unsqueeze(0),
-                "attention_mask": batch["attention_mask"][item, :start].unsqueeze(0),
-                "prompt": tokenizer.decode(prompt_ids, skip_special_tokens=True).strip(),
-                "reference": tokenizer.decode(batch["labels"][item, start:end], skip_special_tokens=True).strip(),
-            }
-            if "ecg_values" in batch:
-                job["ecg_values"] = batch["ecg_values"][item:item + 1]
-            jobs.append(job)
+    input_ids = batch["input_ids"][0]
+    attention_mask = batch["attention_mask"][0]
+    labels = batch["labels"][0]
+    for start, end in response_ranges(labels):
+        prompt_ids = input_ids[:start]
+        job = {
+            "input_ids": prompt_ids.unsqueeze(0),
+            "attention_mask": attention_mask[:start].unsqueeze(0),
+            "prompt": tokenizer.decode(prompt_ids, skip_special_tokens=True).strip(),
+            "reference": tokenizer.decode(labels[start:end], skip_special_tokens=True).strip(),
+        }
+        if "ecg_values" in batch:
+            job["ecg_values"] = batch["ecg_values"]
+        jobs.append(job)
     return jobs
 
 
@@ -165,7 +177,8 @@ def evaluate(model, dataloader, tokenizer, config: dict) -> dict:
     progress = tqdm(dataloader, desc="Evaluation", leave=False)
     with torch.inference_mode():
         for batch_index, batch in enumerate(progress):
-            jobs = build_jobs(move_to_device(batch, device), tokenizer)
+            batch = {key: value.to(device) for key, value in batch.items()}
+            jobs = prepare_evaluation(batch, tokenizer)
             for job in jobs:
                 hypothesis = generate_response(model, job, tokenizer, config["evaluation"])
                 records.append({
@@ -186,7 +199,8 @@ def evaluate(model, dataloader, tokenizer, config: dict) -> dict:
     thinking = [(reference[0], hypothesis[0]) for reference, hypothesis in zip(reference_parts, hypothesis_parts)
                 if reference[0]]
     if thinking:
-        metrics["thinking"] = evaluate_strings(*map(list, zip(*thinking)))
+        thinking_references, thinking_hypotheses = zip(*thinking)
+        metrics["thinking"] = evaluate_strings(list(thinking_references), list(thinking_hypotheses))
 
     result = {
         "num_pairs": len(records), "metrics": metrics, "predictions": records,
