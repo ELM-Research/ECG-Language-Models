@@ -28,23 +28,12 @@ def momentum_update(gradient, momentum_buffer, momentum, nesterov):
 def scale_update(update):
     return update.mul_(0.2 * math.sqrt(max(update.shape)))
 
-
-def muon_update(parameter, state, group, index):
-    update = momentum_update(parameter.grad, state["momentum_buffer"], group["momentum"], group["nesterov"])
-    if not isinstance(update, DTensor):
-        return scale_update(orthogonalize(update, group["ns_steps"]))
-    if update.device_mesh.ndim != 1:
-        raise ValueError("Muon supports only a one-dimensional FSDP2 mesh")
-
-    mesh = update.device_mesh
-    destination = index % mesh.size()
-    full_update = update.full_tensor()
-    if mesh.get_local_rank() == destination:
-        full_update.copy_(orthogonalize(full_update, group["ns_steps"]))
-    update = distribute_tensor(full_update, mesh, update.placements,
-                               src_data_rank=destination)
-    return scale_update(update)
-
+def muon_update(parameter, state, group): # index no longer needed
+    update = momentum_update(parameter.grad, state["momentum_buffer"],
+                             group["momentum"], group["nesterov"])
+    if not isinstance(update, DTensor): return scale_update(orthogonalize(update, group["ns_steps"]))
+    orthogonal = orthogonalize(update.full_tensor(), group["ns_steps"]).to(update.dtype)
+    return scale_update( distribute_tensor(orthogonal, update.device_mesh, update.placements, src_data_rank=None) )
 
 def adamw_update(parameter, state, group):
     gradient = parameter.grad
@@ -76,7 +65,7 @@ class Muon(torch.optim.Optimizer):
                 loss = closure()
 
         for group in self.param_groups:
-            for index, parameter in enumerate(group["params"]):
+            for parameter in group["params"]:
                 if parameter.grad is None:
                     if not group["use_muon"] or not isinstance(parameter, DTensor):
                         continue
@@ -90,7 +79,7 @@ class Muon(torch.optim.Optimizer):
                     state["exp_avg_sq"] = torch.zeros_like(parameter)
 
                 if group["use_muon"]:
-                    update = muon_update(parameter, state, group, index)
+                    update = muon_update(parameter, state, group)
                 else:
                     update = adamw_update(parameter, state, group)
                 parameter.mul_(1 - group["lr"] * group["weight_decay"])
