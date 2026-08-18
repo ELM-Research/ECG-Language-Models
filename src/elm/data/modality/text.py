@@ -91,7 +91,5 @@ class Text:
             if self.enable_thinking and input_ids[response_start:response_start + 1] == [think_start]:
                 response_start += 1
             labels[response_start:response_end] = input_ids[response_start:response_end]
-        if all(label == -100 for label in labels):
-            raise ValueError("No assistant response fits within the tokenized sequence")
         tokenized_text["labels"] = labels
         return tokenized_text

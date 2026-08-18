@@ -24,12 +24,6 @@ git clone https://github.com/ELM-Research/ELM.git
 cd ELM && uv sync
 ```
 
-For BPE symbolic representation with [ECG-Byte](https://arxiv.org/abs/2412.14373), do:
-
-```bash
-uv sync --extra ecg_byte
-```
-
 If Rust is not installed run `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain=1.82.0 -y`, open a new terminal to set the PATH, and rerun the above commands.
 
 ## ECG Datasets <a name="data"></a>
