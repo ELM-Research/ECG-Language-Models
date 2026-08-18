@@ -7,14 +7,23 @@ from elm.training.common import build_scheduler
 from elm.training.rl.trainer import train_epoch as train_rl_epoch
 from elm.training.supervised import train_epoch as train_supervised_epoch
 from elm.utils.logging import cleanup_wandb, setup_experiment_folder, setup_wandb
-from elm.utils.parallelism import cleanup, init_dist, is_main, setup_model
+from elm.utils.parallelism import (
+    cleanup,
+    configure_runtime,
+    init_dist,
+    is_main,
+    print_training_setup,
+    setup_model,
+)
 from elm.utils.seed import set_seed
 RUNS_DIR = "./src/runs"
 
 def main():
     config, exp_name = get_config()
     strategy = config["gpu"]["strategy"]
+    configure_runtime(config)
     init_dist(strategy)
+    print_training_setup(config)
 
     try:
         run_dir = None

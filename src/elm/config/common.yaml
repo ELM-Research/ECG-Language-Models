@@ -1,18 +1,21 @@
 seed: 0
-development: true
+development: false
 wandb: false
 
 gpu:
   strategy: fsdp2 # null for one device, fsdp2 for multiple devices
+  matmul_precision: high
+  cudnn_benchmark: true
 
 training:
   max_grad_norm: 1.0
-  num_workers: 16
+  num_workers: 8
+  prefetch_factor: 2
   save_steps: 500
 
 optimizer:
   name: muon
-  weight_decay: 0.05
+  weight_decay: 0.01
   scheduler: cosine
   warmup_ratio: 0.03
 

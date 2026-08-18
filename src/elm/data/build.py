@@ -19,6 +19,7 @@ class DataBuilder:
         self.num_ecg_tokens = model["num_ecg_tokens"]
         self.batch_size = training_config["batch_size"]
         self.num_workers = training_config["num_workers"]
+        self.prefetch_factor = training_config.get("prefetch_factor", 2)
         self.training_stage = training_config["training_stage"]
         self.system_prompt_path = config.get("system_prompt_path")
         self.seed = config["seed"]
@@ -46,7 +47,7 @@ class DataBuilder:
             collate_fn = DataCollatorForSeq2Seq(llm_tokenizer,
                                                 label_pad_token_id=-100),
             persistent_workers=self.is_training and self.num_workers > 0,
-            prefetch_factor=4 if self.num_workers > 0 else None,
+            prefetch_factor=self.prefetch_factor if self.num_workers > 0 else None,
         )
 
     def get_torch_dataloader_sampler(self, torch_dataset,):

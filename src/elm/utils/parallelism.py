@@ -18,6 +18,13 @@ def cleanup():
             pass
 
 
+def configure_runtime(config: dict) -> None:
+    gpu_config = config.get("gpu", {})
+    torch.set_float32_matmul_precision(gpu_config.get("matmul_precision", "high"))
+    if torch.backends.cudnn.is_available():
+        torch.backends.cudnn.benchmark = gpu_config.get("cudnn_benchmark", True)
+
+
 def init_dist(strategy: str | None) -> None:
     if strategy is None:
         return
@@ -42,6 +49,35 @@ def get_world_size() -> int:
 
 def is_main() -> bool:
     return get_rank() == 0
+
+
+def print_training_setup(config: dict) -> None:
+    if not is_main():
+        return
+    training = config["training"]
+    world_size = get_world_size()
+    micro_batch = training["batch_size"]
+    accumulation = training["gradient_accumulation_steps"]
+    global_batch = micro_batch * accumulation * world_size
+    details = (
+        f"stage={training['training_stage']}, world_size={world_size}, "
+        f"micro_batch/gpu={micro_batch}, accumulation={accumulation}, "
+        f"global_batch/update={global_batch}"
+    )
+    if training["training_stage"] == "rl":
+        group_size = config["rl"]["group_size"]
+        details += f", sampled_responses/update={global_batch * group_size}"
+    print(f"Training setup: {details}", flush=True)
+    if torch.cuda.is_available():
+        properties = torch.cuda.get_device_properties(get_local_rank())
+        memory_gib = properties.total_memory / 1024**3
+        print(
+            f"CUDA setup: {properties.name}, {memory_gib:.1f} GiB, "
+            f"compute capability {properties.major}.{properties.minor}; "
+            f"matmul={torch.get_float32_matmul_precision()}, "
+            f"cuDNN benchmark={torch.backends.cudnn.benchmark}",
+            flush=True,
+        )
 
 
 def distributed_mean(total: float, count: float, device: torch.device) -> float:

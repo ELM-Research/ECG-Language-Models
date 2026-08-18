@@ -7,7 +7,7 @@ system_prompt_path: src/elm/config/system_prompts/think.txt
 training:
   training_stage: rl
   batch_size: 1
-  gradient_accumulation_steps: 8
+  gradient_accumulation_steps: 3
   num_workers: 8
   epochs: 3
 
