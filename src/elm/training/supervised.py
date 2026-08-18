@@ -1,7 +1,10 @@
+from torch.nn.functional import pad
 from tqdm import tqdm
+
 from elm.training.common import begin_epoch, move_to_device, optimizer_step
 from elm.utils.logging import log_wandb
 from elm.utils.parallelism import distributed_mean, is_main, set_gradient_sync
+
 
 def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, config: dict,
                 epoch: int, start_batch: int = 0) -> dict:
@@ -24,8 +27,12 @@ def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, config: d
         update = step + 1 == window_start + window_size
         set_gradient_sync(model, update)
 
-        loss = model(**move_to_device(batch, device),
-                     use_cache=False).loss # use_cache=True is default for qwen3.5
+        label_start = max(batch["labels"].ne(-100).any(0).nonzero()[0].item(), 1)
+        logits_to_keep = batch["labels"].shape[1] - label_start + 1
+        batch = move_to_device(batch, device)
+        shift_labels = pad(batch["labels"][:, label_start:], (0, 1), value=-100)
+        loss = model(**batch, logits_to_keep=logits_to_keep,
+                     shift_labels=shift_labels, use_cache=False).loss
         (loss / window_size).backward()
         loss_value = loss.detach().item()
         total_loss += loss_value
