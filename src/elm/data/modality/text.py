@@ -28,6 +28,21 @@ def normalize_text(text: list[dict], system_prompt: str = None) -> list[dict[str
     return normalized
 
 
+def chat_prompt(tokenizer, messages: list[dict], explicit_thinking: bool) -> str:
+    prompt = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+        enable_thinking=True,
+    )
+    think_prompt = f"{THINK_START}\n"
+    if not explicit_thinking:
+        if not prompt.endswith(think_prompt):
+            raise ValueError("The chat template did not provide the expected generation prompt")
+        prompt = prompt[:-len(think_prompt)]
+    return prompt
+
+
 class Text:
     def __init__(self, llm_tokenizer, truncation_length, training_stage,
                  system_prompt_path=None, truncate=True, explicit_thinking=False):
@@ -88,15 +103,8 @@ class Text:
             raise ValueError("An SFT example must end with an assistant response")
         user["content"] = ecg_token_placeholders + user["content"]
 
-        prompt = self.llm_tokenizer.apply_chat_template(
-            normalized_text[:-1], tokenize=False, add_generation_prompt=True,
-            enable_thinking=True,
-        )
-        think_prompt = f"{THINK_START}\n"
-        if not self.explicit_thinking:
-            if not prompt.endswith(think_prompt):
-                raise ValueError("The chat template did not provide the expected generation prompt")
-            prompt = prompt[:-len(think_prompt)]
+        prompt = chat_prompt(
+            self.llm_tokenizer, normalized_text[:-1], self.explicit_thinking)
 
         conversation = self.llm_tokenizer.apply_chat_template(
             normalized_text, tokenize=False, add_generation_prompt=False,

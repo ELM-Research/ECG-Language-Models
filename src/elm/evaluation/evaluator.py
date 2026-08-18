@@ -13,6 +13,8 @@ from nltk.translate.meteor_score import meteor_score
 from rouge_score.rouge_scorer import RougeScorer
 from tqdm import tqdm
 
+from elm.data.modality.text import chat_prompt
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -22,22 +24,20 @@ ROUGE_SCORER = RougeScorer(["rougeL"], use_stemmer=True)
 
 def split_response(text: str, explicit_thinking: bool = False) -> tuple[str, str]:
     thinking = ""
-    answer = text
+    in_thinking = explicit_thinking
     if "<think>" in text:
-        _, _, thinking_and_answer = text.partition("<think>")
-        thinking, closed, answer = thinking_and_answer.partition("</think>")
+        _, _, text = text.partition("<think>")
+        in_thinking = True
+    if in_thinking or "</think>" in text:
+        thinking, closed, text = text.partition("</think>")
         if not closed:
             return thinking.strip(), ""
-    elif "</think>" in text:
-        thinking, _, answer = text.partition("</think>")
-    elif explicit_thinking and "<answer>" not in text:
-        return text.strip(), ""
 
-    if "<answer>" in answer:
-        _, _, answer = answer.partition("<answer>")
-    if "</answer>" in answer:
-        answer, _, _ = answer.partition("</answer>")
-    return thinking.strip(), answer.strip()
+    if "<answer>" in text:
+        _, _, text = text.partition("<answer>")
+    if "</answer>" in text:
+        text, _, _ = text.partition("</answer>")
+    return thinking.strip(), text.strip()
 
 
 def normalize(text: str) -> str:
@@ -60,7 +60,7 @@ def token_f1(reference: str, hypothesis: str) -> float:
 def evaluate_strings(references: list[str], hypotheses: list[str]) -> dict[str, float]:
     if len(references) != len(hypotheses):
         raise ValueError("references and hypotheses must have the same length")
-    pairs = [(reference, hypothesis) for reference, hypothesis in zip(references, hypotheses) if reference]
+    pairs = list(zip(references, hypotheses))
     if not pairs:
         return {name: 0.0 for name in ("accuracy", "f1", "bleu_4", "rouge_l", "meteor")}
     references, hypotheses = map(list, zip(*pairs))
@@ -82,33 +82,6 @@ def evaluate_strings(references: list[str], hypotheses: list[str]) -> dict[str, 
             for reference, hypothesis in pairs
         ])),
     }
-
-
-def chat_prompt(tokenizer, messages: list[dict], explicit_thinking: bool) -> str:
-    prompt = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
-        enable_thinking=True,
-    )
-    if not explicit_thinking:
-        think_prompt = "<think>\n"
-        if not prompt.endswith(think_prompt):
-            raise ValueError("The chat template did not provide the expected generation prompt")
-        prompt = prompt[:-len(think_prompt)]
-    return prompt
-
-
-def reference_response(tokenizer, messages: list[dict], prompt: str) -> str:
-    conversation = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=False,
-    )
-    if not conversation.startswith(prompt):
-        raise ValueError("The generation prompt does not match the reference conversation")
-    response_ids = tokenizer.encode(conversation[len(prompt):], add_special_tokens=False)
-    return tokenizer.decode(response_ids, skip_special_tokens=True).strip()
 
 
 def eos_ids(model, tokenizer) -> list[int]:
@@ -192,7 +165,7 @@ def evaluate(model, dataset, tokenizer, config: dict) -> dict:
                     turn += 1
                     prompt = chat_prompt(tokenizer, history, explicit_thinking)
                     input_ids = tokenizer.encode(prompt, add_special_tokens=False)
-                    reference = reference_response(tokenizer, [*history, message], prompt)
+                    reference = message["content"]
                     hypothesis = generate_response(
                         model, input_ids, ecg_values, tokenizer, config["evaluation"])
                     records.append({
@@ -211,7 +184,7 @@ def evaluate(model, dataset, tokenizer, config: dict) -> dict:
 
     references = [record["reference"] for record in records]
     hypotheses = [record["hypothesis"] for record in records]
-    reference_parts = [split_response(text, explicit_thinking) for text in references]
+    reference_parts = [split_response(text) for text in references]
     hypothesis_parts = [split_response(text, explicit_thinking) for text in hypotheses]
     answer_references = [parts[1] for parts in reference_parts]
     answer_hypotheses = [parts[1] for parts in hypothesis_parts]
