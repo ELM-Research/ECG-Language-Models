@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import itertools
+import json
 import time
+from datetime import datetime
 from pathlib import Path
 
 import torch
@@ -30,6 +32,8 @@ from elm.utils.parallelism import (
     setup_model,
 )
 from elm.utils.seed import set_seed
+
+LOG_PATH = Path("src/logs/profiles.jsonl")
 
 
 class LimitedLoader:
@@ -89,6 +93,54 @@ def reduce_profile_stats(loader: LimitedLoader, elapsed: float, device: torch.de
     return stats.tolist()
 
 
+def build_record(config, args, steps, result, stats) -> dict:
+    """Flatten the knobs worth sweeping plus the measured throughput."""
+    examples, tokens, elapsed, peak_allocated, peak_reserved = stats
+    training = config["training"]
+    model = config["model"]
+    world_size = get_world_size()
+    return {
+        "time": datetime.now().isoformat(timespec="seconds"),
+        "config": args.config.stem,
+        "model": model["name"],
+        "language_model": model["language_model"],
+        "vision_model": Path(model["vision_model"]).name,
+        "peft": model["peft"],
+        "lora_rank": model["lora_rank"],
+        "trainable": model["trainable"],
+        "training_stage": training["training_stage"],
+        "gpu": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",
+        "strategy": config["gpu"]["strategy"],
+        "world_size": world_size,
+        "batch_size": training["batch_size"],
+        "gradient_accumulation_steps": training["gradient_accumulation_steps"],
+        "global_batch": training["batch_size"] * training["gradient_accumulation_steps"] * world_size,
+        "num_workers": training["num_workers"],
+        "prefetch_factor": training["prefetch_factor"],
+        "segment_length": config["segment_length"],
+        "num_ecg_tokens": model["num_ecg_tokens"],
+        "patch_size": model["patch_size"],
+        "truncation_length": model["truncation_length"],
+        "steps": steps,
+        "wall_time_s": round(elapsed, 2),
+        "examples_per_s": round(examples / elapsed, 2),
+        "tokens_per_s": round(tokens / elapsed),
+        "peak_allocated_gib": round(peak_allocated, 2),
+        "peak_reserved_gib": round(peak_reserved, 2),
+        "optimizer_steps": result["optimizer_steps"],
+    }
+
+
+def log_record(record: dict) -> None:
+    print("\nProfile result")
+    for key, value in record.items():
+        print(f"  {key}: {value}")
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with LOG_PATH.open("a") as file:
+        file.write(json.dumps(record) + "\n")
+    print(f"Appended profile to {LOG_PATH}")
+
+
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -127,23 +179,14 @@ def main() -> None:
         if device.type == "cuda":
             torch.cuda.synchronize(device)
         elapsed = time.perf_counter() - start
-        examples, tokens, elapsed, peak_allocated, peak_reserved = reduce_profile_stats(
-            dataloader, elapsed, device
-        )
+        stats = reduce_profile_stats(dataloader, elapsed, device)
 
         if is_main():
-            print("\nProfile result")
-            print(f"  measured batches/rank: {len(dataloader)}")
-            print(f"  wall time: {elapsed:.2f} s")
-            print(f"  global examples/s: {examples / elapsed:.2f}")
-            print(f"  input tokens/s: {tokens / elapsed:.0f}")
-            print(f"  peak allocated/GPU: {peak_allocated:.2f} GiB")
-            print(f"  peak reserved/GPU: {peak_reserved:.2f} GiB")
-            print(f"  optimizer steps: {result['optimizer_steps']}")
+            record = build_record(config, args, len(dataloader), result, stats)
             if config["training"]["training_stage"] == "rl":
-                group_size = config["rl"]["group_size"]
-                print(f"  sampled responses: {examples * group_size:.0f}")
-            print(f"  data-parallel world size: {get_world_size()}")
+                record["group_size"] = config["rl"]["group_size"]
+                record["sampled_responses"] = round(stats[0] * config["rl"]["group_size"])
+            log_record(record)
     finally:
         cleanup()
 
