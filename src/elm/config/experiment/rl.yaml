@@ -20,8 +20,8 @@ model:
   trainable: [language_model]
 
 data:
-  data_names: [ELM-Research/rl-ecg-r1-filtered]
-  split_names: [fold1_train]
+  data_names: [ELM-Research/rl-ecg-r1]
+  split_names: [fold1_test]
 
 rl:
   group_size: 16

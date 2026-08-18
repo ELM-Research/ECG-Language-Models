@@ -6,6 +6,7 @@ from transformers import AutoTokenizer, DataCollatorForSeq2Seq
 from datasets import load_dataset
 from elm.utils.parallelism import get_rank, get_world_size, is_main
 from elm.utils.constants import ECG_TOKEN_PLACEHOLDER, RL_TOKENS, ROLES
+from elm.data.modality.signal import Signal
 
 class DataBuilder:
     def __init__(self, config: dict, training: bool = True):
@@ -20,7 +21,6 @@ class DataBuilder:
         self.num_workers = training_config["num_workers"]
         self.training_stage = training_config["training_stage"]
         self.system_prompt_path = config.get("system_prompt_path")
-        self.modality = config["modality"]
         self.seed = config["seed"]
         self.augmentation = config["augment_ecg"] and self.is_training
         self.perturbation = config["perturbation"]
@@ -65,7 +65,7 @@ class DataBuilder:
             data.extend(dataset)
         if self.is_training and self.training_stage == "sft":
             data = self.split_sft_turns(data)
-        if is_main(): print(f"Length of Dataset: {len(data)}", f"Using {self.modality} modality")
+        if is_main(): print(f"Length of Dataset: {len(data)}")
         text_preparer = Text(llm_tokenizer,
                              self.truncation_length,
                              self.training_stage if self.is_training else None,
@@ -76,8 +76,8 @@ class DataBuilder:
             placeholders = ("" if self.perturbation == "only_text"
                             else ECG_TOKEN_PLACEHOLDER * self.num_ecg_tokens + "\n")
             self.print_training_example(text_preparer(data[0]["text"], placeholders), llm_tokenizer)
-        ecg_modality_preparer = self.build_ecg_modality()
-        torch_dataset = ELMDataset(data, ecg_modality_preparer, text_preparer,
+        signal_preparer = Signal(self.num_ecg_tokens, self.perturbation == "only_text")
+        torch_dataset = ELMDataset(data, signal_preparer, text_preparer,
                              augmentation = self.augmentation,
                              perturbation = self.perturbation)
         return torch_dataset
@@ -96,13 +96,6 @@ class DataBuilder:
             if len(examples) == num_examples:
                 raise ValueError("An SFT conversation must contain an assistant response")
         return examples
-
-    def build_ecg_modality(self,):
-        if self.modality == "signal":
-            from elm.data.modality.signal import Signal
-            return Signal(self.num_ecg_tokens, self.perturbation == "only_text")
-
-        raise ValueError(f"Unknown data modality: {self.modality}")
 
     def build_hf_dataset(self, data_name, split_name):
         data = load_dataset(data_name, split=split_name).with_transform(self.decode_batch)
