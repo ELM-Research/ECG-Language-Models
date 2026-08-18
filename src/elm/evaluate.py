@@ -25,7 +25,7 @@ def fold_config(config: dict, fold) -> dict:
 
 def main() -> None:
     config, experiment_name = get_config()
-    folds, seeds = config["evaluation"]["folds"], config["evaluation"]["seeds"] 
+    folds, seeds = config["evaluation"]["folds"], config["evaluation"]["seeds"]
     run_dir = setup_experiment_folder(
         Path(config["evaluation"]["output_dir"]) / experiment_name, config)
 
