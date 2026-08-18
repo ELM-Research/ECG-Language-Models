@@ -45,8 +45,6 @@ def main():
                                     config["training"]["save_steps"],
                                     enabled=not config["development"])
         start_epoch, start_batch = checkpointer.load(resume) if resume else (0, 0)
-        if start_batch > len(dataloader):
-            raise ValueError("Checkpoint batch exceeds the dataloader length")
         for epoch in range(start_epoch, config["training"]["epochs"]):
             skip_batches = start_batch if epoch == start_epoch else 0
             if config["training"]["training_stage"] == "rl":
