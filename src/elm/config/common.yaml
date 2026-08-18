@@ -1,6 +1,6 @@
 seed: 0
 development: false
-wandb: false
+wandb: true
 
 gpu:
   strategy: fsdp2 # null for one device, fsdp2 for multiple devices
@@ -11,7 +11,6 @@ training:
   max_grad_norm: 1.0
   num_workers: 8
   prefetch_factor: 2
-  save_steps: 500
   resume: null
 
 optimizer:

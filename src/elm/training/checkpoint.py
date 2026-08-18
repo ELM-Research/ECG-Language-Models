@@ -14,9 +14,7 @@ from elm.utils.parallelism import is_main
 
 class Checkpointer:
     def __init__(self, model, tokenizer, optimizer, scheduler, run_dir: Path | None,
-                 save_steps: int, enabled: bool):
-        if save_steps < 1:
-            raise ValueError("save_steps must be positive")
+                 save_steps: int | None, enabled: bool):
         if enabled and is_main() and run_dir is None:
             raise ValueError("run_dir is required when checkpointing is enabled")
         self.model = model
@@ -34,7 +32,9 @@ class Checkpointer:
         previous = self.steps
         self.steps += steps
         self.epoch, self.batch = epoch, batch
-        if self.steps // self.save_steps > previous // self.save_steps:
+        if self.save_steps is None and batch == 0:
+            self.save(f"epoch_{epoch}")
+        elif self.save_steps and self.steps // self.save_steps > previous // self.save_steps:
             self.save(f"step_{self.steps}")
 
     def save_best(self, loss: float) -> None:

@@ -42,7 +42,7 @@ def main():
         optimizer = build_optimizer(config, model)
         scheduler = build_scheduler(config, optimizer, dataloader)
         checkpointer = Checkpointer(model, tokenizer, optimizer, scheduler, run_dir,
-                                    config["training"]["save_steps"],
+                                    config["training"].get("save_steps"),
                                     enabled=not config["development"])
         start_epoch, start_batch = checkpointer.load(resume) if resume else (0, 0)
         for epoch in range(start_epoch, config["training"]["epochs"]):

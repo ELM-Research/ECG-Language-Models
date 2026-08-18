@@ -3,7 +3,7 @@ defaults:
 
 training:
   training_stage: pretrain
-  batch_size: 16
+  batch_size: 12
   gradient_accumulation_steps: 1
   epochs: 10
 
