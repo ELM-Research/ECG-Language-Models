@@ -14,7 +14,7 @@ from elm.utils.parallelism import (
 
 
 def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, tokenizer,
-                config: dict, epoch: int) -> dict:
+                config: dict, epoch: int, start_batch: int = 0) -> dict:
     training, rl = config["training"], config["rl"]
     accumulation_steps = training["gradient_accumulation_steps"]
     if (accumulation_steps < 1 or rl["group_size"] < 2 or
@@ -28,6 +28,8 @@ def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, tokenizer
     loss_windows = optimizer_steps = 0
 
     for step, batch in enumerate(progress):
+        if step < start_batch:
+            continue
         batch = move_to_device(batch, device)
         for item in range(batch["input_ids"].shape[0]):
             rollout = rollout_group(
@@ -64,8 +66,11 @@ def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, tokenizer
                     kl_sum += kl.detach().item()
                     kl_tokens += rollout["response_mask"].sum().item()
                 learning_rate = optimizer.param_groups[0]["lr"]
-                optimizer_step(model, optimizer, scheduler, checkpointer,
-                               training["max_grad_norm"])
+                optimizer_step(model, optimizer, scheduler, training["max_grad_norm"])
+
+        next_epoch = epoch + (step + 1 == len(dataloader))
+        checkpointer.step(next_epoch, (step + 1) % len(dataloader),
+                          rl["updates_per_rollout"] if has_signal else 0)
 
         loss = distributed_mean(loss_sum, rl["updates_per_rollout"], device) if has_signal else 0.0
         kl = distributed_mean(kl_sum, kl_tokens, device) if has_signal else 0.0

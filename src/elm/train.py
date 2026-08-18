@@ -20,6 +20,9 @@ RUNS_DIR = "./src/runs"
 
 def main():
     config, exp_name = get_config()
+    resume = config["training"].get("resume")
+    if resume:
+        config["model"]["checkpoint"] = resume
     strategy = config["gpu"]["strategy"]
     configure_runtime(config)
     init_dist(strategy)
@@ -38,16 +41,22 @@ def main():
         model = setup_model(build_model(config, tokenizer), strategy)
         optimizer = build_optimizer(config, model)
         scheduler = build_scheduler(config, optimizer, dataloader)
-        checkpointer = Checkpointer(model, tokenizer, run_dir, config["training"]["save_steps"],
+        checkpointer = Checkpointer(model, tokenizer, optimizer, scheduler, run_dir,
+                                    config["training"]["save_steps"],
                                     enabled=not config["development"])
-        for epoch in range(config["training"]["epochs"]):
+        start_epoch, start_batch = checkpointer.load(resume) if resume else (0, 0)
+        if start_batch > len(dataloader):
+            raise ValueError("Checkpoint batch exceeds the dataloader length")
+        for epoch in range(start_epoch, config["training"]["epochs"]):
+            skip_batches = start_batch if epoch == start_epoch else 0
             if config["training"]["training_stage"] == "rl":
                 result = train_rl_epoch(model, optimizer, scheduler, checkpointer,
-                                        dataloader, tokenizer, config, epoch)
+                                        dataloader, tokenizer, config, epoch, skip_batches)
             else:
                 result = train_supervised_epoch(model, optimizer, scheduler, checkpointer,
-                                                dataloader, config, epoch)
-            checkpointer.save_best(result["average_loss"])
+                                                dataloader, config, epoch, skip_batches)
+            if not skip_batches:
+                checkpointer.save_best(result["average_loss"])
             if is_main():
                 print(f"Epoch {epoch + 1}: loss={result['average_loss']:.4f}")
 

@@ -36,10 +36,9 @@ def begin_epoch(model, dataloader, epoch: int) -> torch.device:
         dataloader.sampler.set_epoch(epoch)
     return next(model.parameters()).device
 
-def optimizer_step(model, optimizer, scheduler, checkpointer, max_grad_norm: float) -> None:
+def optimizer_step(model, optimizer, scheduler, max_grad_norm: float) -> None:
     if max_grad_norm > 0:
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
     optimizer.step()
     scheduler.step()
     optimizer.zero_grad(set_to_none=True)
-    checkpointer.step()

@@ -12,6 +12,7 @@ training:
   num_workers: 8
   prefetch_factor: 2
   save_steps: 500
+  resume: null
 
 optimizer:
   name: muon

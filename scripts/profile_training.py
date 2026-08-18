@@ -109,7 +109,7 @@ def main() -> None:
         model = setup_model(build_model(config, tokenizer), strategy)
         optimizer = build_optimizer(config, model)
         scheduler = build_scheduler(config, optimizer, dataloader)
-        checkpointer = Checkpointer(model, tokenizer, None, 1, enabled=False)
+        checkpointer = Checkpointer(model, tokenizer, optimizer, scheduler, None, 1, enabled=False)
 
         device = get_device()
         if device.type == "cuda":

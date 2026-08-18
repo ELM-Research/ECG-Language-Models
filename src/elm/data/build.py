@@ -51,7 +51,7 @@ class DataBuilder:
         )
 
     def get_torch_dataloader_sampler(self, torch_dataset,):
-        if self.is_training and get_world_size() > 1:
+        if self.is_training:
             return DistributedSampler(torch_dataset, num_replicas=get_world_size(),
                                       rank=get_rank(), seed=self.seed, shuffle=True)
         return None
