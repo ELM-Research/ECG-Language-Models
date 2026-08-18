@@ -1,396 +1,326 @@
+import json
 import re
+import string
+from collections import Counter
+from collections.abc import Mapping
+from pathlib import Path
+
+import matplotlib
 import numpy as np
 import scipy.stats as stats
-from tqdm import tqdm
 import torch
-from collections import Counter
-import string
-from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
-from nltk.translate.meteor_score import meteor_score as nltk_meteor
+from nltk.translate.bleu_score import SmoothingFunction, corpus_bleu
+from nltk.translate.meteor_score import meteor_score
 from rouge_score.rouge_scorer import RougeScorer
-import matplotlib
+from tqdm import tqdm
+
+from elm.training.common import move_to_device
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from utils.gpu_manager import is_main, train_dev_break, batch_to_device
-from configs.constants import SIGNAL_INJECTION_ELMS
 
-_THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
-_ANSWER_RE = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
+THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+ANSWER_RE = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
+ROUGE_SCORER = RougeScorer(["rougeL"], use_stemmer=True)
 
-def split_response(text):
+
+def split_response(text: str) -> tuple[str, str]:
     if "</think>" in text and "<think>" not in text:
-        text = "<think>\n" + text  # explicit_thinking: opener was consumed as prompt prefix
-    t, a = _THINK_RE.search(text), _ANSWER_RE.search(text)
-    thinking = t.group(1).strip() if t else ""
-    answer = (a.group(1) if a else text[t.end():] if t else text).strip()
-    return thinking, answer
+        text = f"<think>{text}"
+    thinking = THINK_RE.search(text)
+    answer = ANSWER_RE.search(text)
+    thinking_text = thinking.group(1).strip() if thinking else ""
+    answer_text = answer.group(1) if answer else text[thinking.end():] if thinking else text
+    return thinking_text, answer_text.strip()
 
-_rouge_scorer = RougeScorer(["rougeL"], use_stemmer=True)
 
-def calculate_acc(references, hypotheses):
-    return np.mean([ref == hyp for ref, hyp in zip(references, hypotheses)])
+def normalize(text: str) -> str:
+    return " ".join(text.lower().translate(str.maketrans("", "", string.punctuation)).split())
 
-def evaluate_strings(references, hypotheses):
-    if len(references) != len(hypotheses):
-        raise ValueError("The number of references and hypotheses must be the same.")
-    valid_pairs = [(ref, hyp) for ref, hyp in zip(references, hypotheses) if ref]
-    if not valid_pairs:
-        return {
-            "ACC": 0.0,
-            "F1": 0.0,
-            "BLEU-4": 0.0,
-            "ROUGE-L": 0.0,
-            "METEOR": 0.0,
-        }
-    valid_refs, valid_hyps = zip(*valid_pairs)
-    return {
-        "ACC": calculate_acc(valid_refs, valid_hyps),
-        "F1": calculate_f1(valid_refs, valid_hyps),
-        "BLEU-4": calculate_bleu4(valid_refs, valid_hyps),
-        "ROUGE-L": calculate_rouge_l(valid_refs, valid_hyps),
-        "METEOR": calculate_meteor(valid_refs, valid_hyps),
-    }
-def _normalize(text):
-    text = text.lower()
-    text = text.translate(str.maketrans("", "", string.punctuation))
-    text = " ".join(text.split())
-    return text
 
-def _token_f1(ref, hyp):
-    ref_tokens = _normalize(ref).split()
-    hyp_tokens = _normalize(hyp).split()
-    if not ref_tokens and not hyp_tokens:
-        return 1.0
-    if not ref_tokens or not hyp_tokens:
+def token_f1(reference: str, hypothesis: str) -> float:
+    reference_tokens = normalize(reference).split()
+    hypothesis_tokens = normalize(hypothesis).split()
+    if not reference_tokens or not hypothesis_tokens:
+        return float(reference_tokens == hypothesis_tokens)
+    overlap = sum((Counter(reference_tokens) & Counter(hypothesis_tokens)).values())
+    if not overlap:
         return 0.0
-    common = Counter(ref_tokens) & Counter(hyp_tokens)
-    num_common = sum(common.values())
-    if num_common == 0:
-        return 0.0
-    precision = num_common / len(hyp_tokens)
-    recall = num_common / len(ref_tokens)
+    precision = overlap / len(hypothesis_tokens)
+    recall = overlap / len(reference_tokens)
     return 2 * precision * recall / (precision + recall)
 
-def calculate_f1(references, hypotheses):
-    return np.mean([_token_f1(ref, hyp) for ref, hyp in zip(references, hypotheses)])
 
-def calculate_bleu4(references, hypotheses):
-    return corpus_bleu([[r.split()] for r in references], [h.split() for h in hypotheses],
-                       weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=SmoothingFunction().method1)
-
-def calculate_rouge_l(references, hypotheses):
-    return np.mean([_rouge_scorer.score(r, h)["rougeL"].fmeasure for r, h in zip(references, hypotheses)])
-
-def calculate_meteor(references, hypotheses):
-    return np.mean([nltk_meteor([r.split()], h.split()) for r, h in zip(references, hypotheses)])
-
-def compute_classification_metrics(references, hypotheses):
-    valid_classes = set(references)
-
-    other_raw = [h for h in hypotheses if h not in valid_classes]
-    other_counts = dict(Counter(other_raw))
-
-    hypotheses = [h if h in valid_classes else "Other" for h in hypotheses]
-    has_other = "Other" not in valid_classes and any(h == "Other" for h in hypotheses)
-
-    row_classes = sorted(valid_classes)
-    col_classes = row_classes + (["Other"] if has_other else [])
-    cm = Counter((r, h) for r, h in zip(references, hypotheses))
-
-    per_class_acc = {}
-    for c in row_classes:
-        total = sum(1 for r in references if r == c)
-        per_class_acc[c] = cm[(c, c)] / total if total > 0 else 0.0
-
-    confusion_matrix = {c: {p: cm[(c, p)] for p in col_classes} for c in row_classes}
-    return per_class_acc, confusion_matrix, other_counts
-
-def save_other_outputs_histogram_png(other_counts, path, top_k=20):
-    if not other_counts:
-        return
-    items = Counter(other_counts).most_common(top_k)
-    labels, counts = zip(*items)
-    fig_h = max(3, 0.45 * len(labels) + 1.5)
-    fig, ax = plt.subplots(figsize=(10, fig_h))
-    y = np.arange(len(labels))
-    ax.barh(y, counts)
-    ax.set_yticks(y)
-    ax.set_yticklabels(labels, fontsize=9)
-    ax.invert_yaxis()
-    ax.set_xlabel("Count")
-    ax.set_title(f"Top {min(top_k, len(labels))} 'Other' Outputs")
-    for i, c in enumerate(counts):
-        ax.text(c, i, f" {c}", va="center", fontsize=9)
-    fig.tight_layout()
-    fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved other-output histogram to {path}")
-
-def print_classification_metrics(per_class_acc, confusion_matrix):
-    row_classes = list(confusion_matrix.keys())
-    col_classes = list(next(iter(confusion_matrix.values())).keys())
-    print("\n=== Per-Class Accuracy ===")
-    for c in row_classes:
-        total = sum(confusion_matrix[c].values())
-        correct = confusion_matrix[c][c]
-        print(f"  {c}: {per_class_acc[c]:.4f} ({correct}/{total})")
-    w = max(6, max(len(c) for c in col_classes) + 2)
-    print("\n=== Confusion Matrix (rows=true, cols=predicted) ===")
-    header = " " * w + "".join(f"{c:>{w}}" for c in col_classes)
-    print(header)
-    for c in row_classes:
-        row = f"{c:>{w}}" + "".join(f"{confusion_matrix[c][p]:>{w}}" for p in col_classes)
-        print(row)
-
-def save_confusion_matrix_png(confusion_matrix, path):
-    row_classes = list(confusion_matrix.keys())
-    col_classes = list(next(iter(confusion_matrix.values())).keys())
-    matrix = np.array([[confusion_matrix[r][c] for c in col_classes] for r in row_classes])
-    row_sums = matrix.sum(axis=1, keepdims=True)
-    normed = np.divide(matrix, row_sums, where=row_sums != 0, out=np.zeros_like(matrix, dtype=float))
-
-    n_rows, n_cols = len(row_classes), len(col_classes)
-    fig, ax = plt.subplots(figsize=(max(4, n_cols * 1.5), max(4, n_rows * 1.5)))
-    ax.imshow(normed, cmap="Blues", vmin=0, vmax=1)
-    for i, r in enumerate(row_classes):
-        for j, c in enumerate(col_classes):
-            ax.text(j, i, f"{matrix[i, j]}\n({normed[i, j]:.1%})", ha="center", va="center",
-                    color="white" if normed[i, j] > 0.5 else "black", fontsize=10)
-    ax.set_xticks(range(n_cols))
-    ax.set_yticks(range(n_rows))
-    ax.set_xticklabels(col_classes)
-    ax.set_yticklabels(row_classes)
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("True")
-    ax.set_title("Confusion Matrix")
-    fig.tight_layout()
-    fig.savefig(path, dpi=150)
-    plt.close(fig)
-    print(f"Saved confusion matrix to {path}")
-
-def run_statistical_analysis(all_seeds_results):
-    metrics = list(all_seeds_results[0]["metrics"].keys())
-    statistical_results = {}
-
-    for metric in metrics:
-        metric_values = [result["metrics"][metric] for result in all_seeds_results]
-
-        if isinstance(metric_values[0], dict):
-            statistical_results[metric] = {}
-            for sub_metric in metric_values[0].keys():
-                values = [np.mean(result["metrics"][metric][sub_metric]) * 100 for result in all_seeds_results]
-                mean = np.mean(values)
-                std = np.std(values, ddof=1)
-                confidence = 0.95
-                degrees_of_freedom = len(values) - 1
-                t_value = stats.t.ppf((1 + confidence) / 2, degrees_of_freedom)
-                margin_of_error = t_value * (std / np.sqrt(len(values)))
-                conf_interval = (mean - margin_of_error, mean + margin_of_error)
-                statistical_results[metric][sub_metric] = {
-                    "mean": mean,
-                    "std": std,
-                    "conf_interval": conf_interval,
-                }
-        else:
-            values = [np.mean(result["metrics"][metric]) * 100 for result in all_seeds_results]
-            mean = np.mean(values)
-            std = np.std(values, ddof=1)
-
-            confidence = 0.95
-            degrees_of_freedom = len(values) - 1
-            t_value = stats.t.ppf((1 + confidence) / 2, degrees_of_freedom)
-            margin_of_error = t_value * (std / np.sqrt(len(values)))
-
-            conf_interval = (mean - margin_of_error, mean + margin_of_error)
-
-            statistical_results[metric] = {
-                "mean": mean,
-                "std": std,
-                "conf_interval": conf_interval,
-            }
-
-    return statistical_results
-
-def index_nested(encoder_tokenizer_out, batch):
-    return {k: index_nested(v, batch) if isinstance(v, dict) else v[batch:batch+1] for k, v in encoder_tokenizer_out.items()}
-
-def pretrain_diagnostic_breakdown(refs, hyps):
-    split = lambda s: {x.strip() for x in (s or "").split(";") if x.strip()}
-    matched = missed_inst = extra_inst = only_missed = only_extra = both = other = 0
-    miss_c, extra_c = Counter(), Counter()
-    for r, h in zip(refs, hyps):
-        a, b = split(r), split(h)
-        if not b:
-            other += 1; continue
-        if a == b:
-            matched += 1; continue
-        m, e = a - b, b - a
-        if m: missed_inst += 1; miss_c.update(m)
-        if e: extra_inst += 1; extra_c.update(e)
-        if m and e: both += 1
-        elif m: only_missed += 1
-        else: only_extra += 1
-    n = len(refs)
-    return {"n": n, "matched": matched, "other": other,
-            "not_matched": n - matched - other,
-            "missed_inst": missed_inst, "extra_inst": extra_inst,
-            "only_missed": only_missed, "only_extra": only_extra, "both": both,
-            "top_missed": miss_c.most_common(15), "top_extra": extra_c.most_common(15)}
-
-
-def save_pretrain_breakdown_pngs(b, prefix):
-    def _bar(path, labels, vals, colors, title, total=None):
-        fig, ax = plt.subplots(figsize=(14, max(3, 0.7 * len(labels) + 2)))
-        bars = ax.barh(labels, vals, color=colors)
-        ax.set_title(title, fontsize=20)
-        for br, v in zip(bars, vals):
-            txt = f" {v:,} ({v/total:.1%})" if total else f" {v:,}"
-            ax.text(v, br.get_y() + br.get_height()/2, txt, va="center", fontsize=16)
-        ax.tick_params(labelsize=14); ax.spines[["top","right"]].set_visible(False)
-        fig.savefig(path, dpi=120, bbox_inches="tight"); plt.close(fig)
-    n, nm = b["n"], b["not_matched"]
-    _bar(f"{prefix}_match.png", ["Matched", "Not matched", "Other"],
-         [b["matched"], nm, b["other"]], ["#10b981", "#6b7280", "#94a3b8"],
-         f"Per-instance match (N={n:,})", total=n)
-    _bar(f"{prefix}_missed_extra.png", ["Missed", "Extra"],
-         [b["missed_inst"], b["extra_inst"]], ["#ef4444", "#f59e0b"],
-         "Per-instance disagreement (overlapping)")
-    if nm:
-        _bar(f"{prefix}_mismatch_partition.png", ["Only missed", "Only extra", "Both"],
-             [b["only_missed"], b["only_extra"], b["both"]], ["#ef4444", "#f59e0b", "#8b5cf6"],
-             f"Mismatched breakdown (total={nm:,})", total=nm)
-    for fname, data, title, color in [
-        (f"{prefix}_top_missed.png", b["top_missed"], "Top missed statements", "#ef4444"),
-        (f"{prefix}_top_extra.png", b["top_extra"], "Top extra statements", "#f59e0b")]:
-        if not data: continue
-        top = data[::-1]
-        labels, vals = [k[:45] for k, _ in top], [v for _, v in top]
-        fig, ax = plt.subplots(figsize=(14, max(3, 0.5 * len(labels) + 2)))
-        bars = ax.barh(labels, vals, color=color)
-        ax.set_title(title, fontsize=20); ax.tick_params(labelsize=12)
-        ax.spines[["top", "right"]].set_visible(False)
-        for br, v in zip(bars, vals):
-            ax.text(v, br.get_y() + br.get_height()/2, f" {v:,}", va="center", fontsize=14)
-        fig.savefig(fname, dpi=120, bbox_inches="tight"); plt.close(fig)
-    print(f"Saved pretrain breakdown plots to {prefix}_*.png")
-
-
-def save_incorrect_predictions_histogram_png(references, hypotheses, path, top_k=10):
-    incorrect = [h for r, h in zip(references, hypotheses) if r != h]
-    if not incorrect:
-        return
-    items = Counter(incorrect).most_common(top_k)
-    labels, counts = zip(*items)
-    labels = [l[:80] + "\u2026" if len(l) > 80 else l for l in labels]
-    fig_h = max(3, 0.45 * len(labels) + 1.5)
-    fig, ax = plt.subplots(figsize=(10, fig_h))
-    y = np.arange(len(labels))
-    ax.barh(y, counts)
-    ax.set_yticks(y)
-    ax.set_yticklabels(labels, fontsize=9)
-    ax.invert_yaxis()
-    ax.set_xlabel("Count")
-    ax.set_title(f"Top {min(top_k, len(labels))} Incorrect Predictions")
-    for i, c in enumerate(counts):
-        ax.text(c, i, f" {c}", va="center", fontsize=9)
-    fig.tight_layout()
-    fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved incorrect-predictions histogram to {path}")
-
-def evaluate(elm, dataloader, args):
-    show_progress = is_main()
-    elm.eval()
-    needs_signal_injection = args.elm in SIGNAL_INJECTION_ELMS
-
-    progress = tqdm(
-        dataloader,
-        desc=f"LLM: {args.llm} ENCODER: {args.encoder}",
-        disable=not show_progress,
-        leave=False,
-    )
-    dataset = dataloader.dataset
-    device = next(elm.parameters()).device
-    all_refs, all_hyps, all_prompts = [], [], []
-    with torch.no_grad():
-        for batch_idx, batch in enumerate(progress):
-            B = batch["elm_input_ids"].shape[0]
-            for b in range(B):
-                full_ids = batch["elm_input_ids"][b].tolist()
-                full_attn = batch["elm_attention_mask"][b].tolist()
-                if needs_signal_injection:
-                    signal_indices = batch["signal_id_indices"][b]
-                    full_encoder_tokenizer_out = index_nested(batch["encoder_tokenizer_out"], b)
-                ranges = dataset.get_response_ranges(full_ids)
-                gt_texts = dataset.get_ground_truth_responses(full_ids, ranges)
-                if getattr(args, "dev", False):
-                    print(f"\n--- Batch {batch_idx}, Sample {b} ---")
-                    print(f"Total turns: {len(ranges)}")
-                    dataset.assert_range_alignment(full_ids, ranges)
-                for turn_idx, ((s, _), gt) in enumerate(zip(ranges, gt_texts)):
-                    sub_ids = full_ids[:s]
-                    sub_attn = full_attn[:s]
-                    gen_batch = {
-                        "elm_input_ids": torch.tensor(sub_ids, dtype=torch.int64).unsqueeze(0),
-                        "elm_attention_mask": torch.tensor(sub_attn, dtype=torch.float32).unsqueeze(0),
-                        "max_new_tokens": args.max_new_tokens
-                    }
-                    if needs_signal_injection:
-                        gen_batch["encoder_tokenizer_out"] = full_encoder_tokenizer_out
-                        truncated_len = len(sub_ids)
-                        masked_indices = signal_indices.clone()
-                        masked_indices[masked_indices >= truncated_len] = -1
-                        gen_batch["signal_id_indices"] = masked_indices
-                    gen_batch = {k: batch_to_device(v, device) for k, v in gen_batch.items()}
-                    gen_out = elm.generate(**gen_batch)[0].cpu().tolist()
-                    gen_txt = dataset.get_generated_response_for_turn(sub_ids, gen_out)
-                    if getattr(args, "dev", False):
-                        print(f"\nTurn {turn_idx + 1}:")
-                        print(f"\nGround Truth:\n{gt}")
-                        print(f"\nGenerated:\n{gen_txt}")
-                        print("-" * 100)
-                    if gt:
-                        all_prompts.append(dataset.llm_tokenizer.decode(sub_ids, skip_special_tokens=True).strip())
-                        all_refs.append(gt)
-                        all_hyps.append(gen_txt)
-            if train_dev_break(getattr(args, "dev", False), batch, 0):
-                break
-            # if batch_idx == 10:
-            #     break
-            # input()
-    refs_t, refs_a = map(list, zip(*map(split_response, all_refs))) if all_refs else ([], [])
-    hyps_t, hyps_a = map(list, zip(*map(split_response, all_hyps))) if all_hyps else ([], [])
-    think_pairs = [(r, h) for r, h in zip(refs_t, hyps_t) if r]
-    results = {"answer": evaluate_strings(refs_a, hyps_a)}
-    if think_pairs:
-        results["thinking"] = evaluate_strings(*map(list, zip(*think_pairs)))
-    print("\n=== N-Turn Evaluation (generated vs. gold response only) ===")
-    print(f"Pairs: {len(all_refs)} (thinking pairs: {len(think_pairs)})")
-    for group, mdict in results.items():
-        print(f"[{group}]")
-        for k, v in mdict.items():
-            print(f"  {k}: {v:.4f}")
-    out = {
-        "num_pairs": len(all_refs),
-        "metrics": results,
-        "prompts": all_prompts,
-        "references": all_refs,
-        "hypotheses": all_hyps,
-        "answer_references": refs_a,
-        "answer_hypotheses": hyps_a,
+def evaluate_strings(references: list[str], hypotheses: list[str]) -> dict[str, float]:
+    if len(references) != len(hypotheses):
+        raise ValueError("references and hypotheses must have the same length")
+    pairs = [(reference, hypothesis) for reference, hypothesis in zip(references, hypotheses) if reference]
+    if not pairs:
+        return {name: 0.0 for name in ("accuracy", "f1", "bleu_4", "rouge_l", "meteor")}
+    references, hypotheses = map(list, zip(*pairs))
+    return {
+        "accuracy": float(np.mean([reference == hypothesis for reference, hypothesis in pairs])),
+        "f1": float(np.mean([token_f1(reference, hypothesis) for reference, hypothesis in pairs])),
+        "bleu_4": float(corpus_bleu(
+            [[reference.split()] for reference in references],
+            [hypothesis.split() for hypothesis in hypotheses],
+            weights=(0.25, 0.25, 0.25, 0.25),
+            smoothing_function=SmoothingFunction().method1,
+        )),
+        "rouge_l": float(np.mean([
+            ROUGE_SCORER.score(reference, hypothesis)["rougeL"].fmeasure
+            for reference, hypothesis in pairs
+        ])),
+        "meteor": float(np.mean([
+            meteor_score([reference.split()], hypothesis.split())
+            for reference, hypothesis in pairs
+        ])),
     }
-    if getattr(args, "train_phase", "sft") == "pretrain" and refs_a:
-        breakdown = pretrain_diagnostic_breakdown(refs_a, hyps_a)
-        out["pretrain_breakdown"] = breakdown
-        print(f"\n=== Pretrain diagnostic breakdown (N={breakdown['n']:,}) ===")
-        print(f"  Matched={breakdown['matched']:,}  Not matched={breakdown['not_matched']:,}  Other={breakdown['other']:,}")
-        print(f"  Missed_inst={breakdown['missed_inst']:,}  Extra_inst={breakdown['extra_inst']:,}")
-        print(f"  Only missed={breakdown['only_missed']:,}  Only extra={breakdown['only_extra']:,}  Both={breakdown['both']:,}")
-    if any(d.startswith("ecg-comp") for d in args.data):
-        per_class_acc, confusion_matrix, other_counts = compute_classification_metrics(refs_a, hyps_a)
-        print_classification_metrics(per_class_acc, confusion_matrix)
-        results["per_class_acc"] = per_class_acc
-        out["confusion_matrix"] = confusion_matrix
-        out["other_output_counts"] = other_counts
-    return out
+
+
+def classification_metrics(references: list[str], hypotheses: list[str]) -> tuple[dict, dict, dict]:
+    classes = sorted(set(references))
+    other_counts = Counter(hypothesis for hypothesis in hypotheses if hypothesis not in classes)
+    other_label = "Other"
+    while other_label in classes:
+        other_label = f"_{other_label}"
+    predictions = [hypothesis if hypothesis in classes else other_label for hypothesis in hypotheses]
+    columns = classes + ([other_label] if other_counts else [])
+    counts = Counter(zip(references, predictions))
+    confusion = {reference: {prediction: counts[reference, prediction] for prediction in columns}
+                 for reference in classes}
+    accuracy = {
+        label: counts[label, label] / max(sum(reference == label for reference in references), 1)
+        for label in classes
+    }
+    return accuracy, confusion, dict(other_counts)
+
+
+def response_ranges(labels: torch.Tensor) -> list[tuple[int, int]]:
+    active = labels.ne(-100)
+    padded = torch.nn.functional.pad(active, (1, 1))
+    edges = padded[1:].to(torch.int8) - padded[:-1].to(torch.int8)
+    starts = edges.eq(1).nonzero(as_tuple=True)[0].tolist()
+    ends = edges.eq(-1).nonzero(as_tuple=True)[0].tolist()
+    return list(zip(starts, ends))
+
+
+def build_jobs(batch: dict, tokenizer) -> list[dict]:
+    jobs = []
+    for item in range(batch["input_ids"].shape[0]):
+        for start, end in response_ranges(batch["labels"][item]):
+            prompt_ids = batch["input_ids"][item, :start]
+            job = {
+                "input_ids": prompt_ids.unsqueeze(0),
+                "attention_mask": batch["attention_mask"][item, :start].unsqueeze(0),
+                "prompt": tokenizer.decode(prompt_ids, skip_special_tokens=True).strip(),
+                "reference": tokenizer.decode(batch["labels"][item, start:end], skip_special_tokens=True).strip(),
+            }
+            if "ecg_values" in batch:
+                job["ecg_values"] = batch["ecg_values"][item:item + 1]
+            jobs.append(job)
+    return jobs
+
+
+def eos_ids(model, tokenizer) -> list[int]:
+    generation_model = getattr(model, "language_model", model)
+    configured = getattr(getattr(generation_model, "generation_config", None), "eos_token_id", None)
+    ids = [configured] if isinstance(configured, int) else list(configured or [])
+    im_end = tokenizer.convert_tokens_to_ids("<|im_end|>")
+    if isinstance(im_end, int) and im_end != tokenizer.unk_token_id:
+        ids.append(im_end)
+    return sorted(set(ids))
+
+
+def generate_response(model, job: dict, tokenizer, evaluation: dict) -> str:
+    stop_ids = eos_ids(model, tokenizer)
+    generation = {
+        "input_ids": job["input_ids"],
+        "attention_mask": job["attention_mask"],
+        "max_new_tokens": evaluation["max_new_tokens"],
+        "do_sample": evaluation["do_sample"],
+    }
+    if "ecg_values" in job:
+        generation["ecg_values"] = job["ecg_values"]
+    if stop_ids:
+        generation["eos_token_id"] = stop_ids
+    if tokenizer.pad_token_id is not None:
+        generation["pad_token_id"] = tokenizer.pad_token_id
+    if evaluation["do_sample"]:
+        generation["temperature"] = evaluation.get("temperature", 1.0)
+
+    output = model.generate(**generation)[0]
+    prompt_length = job["input_ids"].shape[1]
+    if output.shape[0] >= prompt_length and torch.equal(output[:prompt_length], job["input_ids"][0]):
+        output = output[prompt_length:]
+    stop = next((index for index, token in enumerate(output.tolist()) if token in stop_ids), len(output))
+    return tokenizer.decode(output[:stop], skip_special_tokens=True).strip()
+
+
+def evaluate(model, dataloader, tokenizer, config: dict) -> dict:
+    model.eval()
+    device = next(model.parameters()).device
+    records = []
+    progress = tqdm(dataloader, desc="Evaluation", leave=False)
+    with torch.inference_mode():
+        for batch_index, batch in enumerate(progress):
+            jobs = build_jobs(move_to_device(batch, device), tokenizer)
+            for job in jobs:
+                hypothesis = generate_response(model, job, tokenizer, config["evaluation"])
+                records.append({
+                    "prompt": job["prompt"], "reference": job["reference"],
+                    "hypothesis": hypothesis,
+                })
+            if config["development"] and batch_index == 0:
+                break
+
+    references = [record["reference"] for record in records]
+    hypotheses = [record["hypothesis"] for record in records]
+    reference_parts = [split_response(text) for text in references]
+    hypothesis_parts = [split_response(text) for text in hypotheses]
+    answer_references = [parts[1] for parts in reference_parts]
+    answer_hypotheses = [parts[1] for parts in hypothesis_parts]
+    metrics = {"answer": evaluate_strings(answer_references, answer_hypotheses)}
+
+    thinking = [(reference[0], hypothesis[0]) for reference, hypothesis in zip(reference_parts, hypothesis_parts)
+                if reference[0]]
+    if thinking:
+        metrics["thinking"] = evaluate_strings(*map(list, zip(*thinking)))
+
+    result = {
+        "num_pairs": len(records), "metrics": metrics, "predictions": records,
+        "answer_references": answer_references, "answer_hypotheses": answer_hypotheses,
+    }
+    if config["training"]["training_stage"] == "pretrain" and answer_references:
+        result["pretrain_breakdown"] = pretrain_breakdown(answer_references, answer_hypotheses)
+    classification = config["evaluation"].get("classification")
+    if classification is None:
+        classification = any("ecg-comp" in name.lower() for name in config["data"]["data_names"])
+    if classification and answer_references:
+        accuracy, confusion, other = classification_metrics(answer_references, answer_hypotheses)
+        metrics["per_class_accuracy"] = accuracy
+        result.update(confusion_matrix=confusion, other_output_counts=other)
+    print_metrics(result)
+    return result
+
+
+def pretrain_breakdown(references: list[str], hypotheses: list[str]) -> dict:
+    def statements(text):
+        return {part.strip() for part in text.split(";") if part.strip()}
+
+    counts = Counter()
+    missed = Counter()
+    extra = Counter()
+    for reference, hypothesis in zip(references, hypotheses):
+        expected, predicted = statements(reference), statements(hypothesis)
+        if not predicted:
+            counts["other"] += 1
+            continue
+        if expected == predicted:
+            counts["matched"] += 1
+            continue
+        missing, added = expected - predicted, predicted - expected
+        counts["missed"] += bool(missing)
+        counts["extra"] += bool(added)
+        counts["both" if missing and added else "only_missed" if missing else "only_extra"] += 1
+        missed.update(missing)
+        extra.update(added)
+    total = len(references)
+    return {
+        "total": total, "matched": counts["matched"], "other": counts["other"],
+        "not_matched": total - counts["matched"] - counts["other"],
+        "missed": counts["missed"], "extra": counts["extra"],
+        "only_missed": counts["only_missed"], "only_extra": counts["only_extra"], "both": counts["both"],
+        "top_missed": missed.most_common(15), "top_extra": extra.most_common(15),
+    }
+
+
+def run_statistical_analysis(results: list[dict]) -> dict:
+    if not results:
+        raise ValueError("At least one evaluation result is required")
+
+    def summarize(values):
+        if any(isinstance(value, Mapping) for value in values):
+            keys = sorted({key for value in values if isinstance(value, Mapping) for key in value})
+            return {key: summarize([value[key] for value in values if isinstance(value, Mapping) and key in value])
+                    for key in keys}
+        values = np.asarray(values, dtype=float)
+        mean = float(values.mean())
+        if len(values) == 1:
+            return {"mean": mean, "std": 0.0, "confidence_interval": [mean, mean], "n": 1}
+        std = float(values.std(ddof=1))
+        margin = float(stats.t.ppf(0.975, len(values) - 1) * std / np.sqrt(len(values)))
+        return {"mean": mean, "std": std, "confidence_interval": [mean - margin, mean + margin], "n": len(values)}
+
+    return summarize([result["metrics"] for result in results])
+
+
+def print_metrics(result: dict) -> None:
+    print(f"\nEvaluation pairs: {result['num_pairs']}")
+    for group, metrics in result["metrics"].items():
+        print(f"[{group}]")
+        for name, value in metrics.items():
+            print(f"  {name}: {value:.4f}")
+
+
+def horizontal_bar(path: Path, items, title: str, top_k: int = 10) -> None:
+    items = list(items)[:top_k]
+    if not items:
+        return
+    labels, values = zip(*reversed(items))
+    figure, axis = plt.subplots(figsize=(10, max(3, 0.45 * len(labels) + 1.5)))
+    axis.barh([str(label)[:80] for label in labels], values)
+    axis.set_xlabel("Count")
+    axis.set_title(title)
+    figure.tight_layout()
+    figure.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(figure)
+
+
+def save_confusion_matrix(confusion: dict, path: Path) -> None:
+    rows = list(confusion)
+    columns = list(next(iter(confusion.values())))
+    matrix = np.array([[confusion[row][column] for column in columns] for row in rows])
+    totals = matrix.sum(axis=1, keepdims=True)
+    normalized = np.divide(matrix, totals, out=np.zeros_like(matrix, dtype=float), where=totals != 0)
+    figure, axis = plt.subplots(figsize=(max(4, len(columns) * 1.5), max(4, len(rows) * 1.5)))
+    axis.imshow(normalized, cmap="Blues", vmin=0, vmax=1)
+    for row in range(len(rows)):
+        for column in range(len(columns)):
+            color = "white" if normalized[row, column] > 0.5 else "black"
+            axis.text(column, row, f"{matrix[row, column]}\n({normalized[row, column]:.1%})",
+                      ha="center", va="center", color=color)
+    axis.set(xticks=range(len(columns)), yticks=range(len(rows)), xticklabels=columns, yticklabels=rows,
+             xlabel="Predicted", ylabel="True", title="Confusion Matrix")
+    figure.tight_layout()
+    figure.savefig(path, dpi=150)
+    plt.close(figure)
+
+
+def save_run(result: dict, output_dir: Path, fold, seed) -> Path:
+    stem = f"fold_{fold}_seed_{seed}"
+    path = output_dir / f"{stem}.json"
+    payload = {"fold": fold, "seed": seed, **result}
+    answer_references = payload.pop("answer_references")
+    answer_hypotheses = payload.pop("answer_hypotheses")
+    with path.open("w") as file:
+        json.dump(payload, file, indent=2)
+
+    horizontal_bar(output_dir / f"{stem}_incorrect.png",
+                   Counter(hypothesis for reference, hypothesis in zip(answer_references, answer_hypotheses)
+                           if reference != hypothesis).most_common(),
+                   "Top Incorrect Predictions")
+    if "confusion_matrix" in result:
+        save_confusion_matrix(result["confusion_matrix"], output_dir / f"{stem}_confusion.png")
+        horizontal_bar(output_dir / f"{stem}_other.png",
+                       Counter(result["other_output_counts"]).most_common(), "Top Other Outputs")
+    if "pretrain_breakdown" in result:
+        breakdown = result["pretrain_breakdown"]
+        horizontal_bar(output_dir / f"{stem}_pretrain.png", [
+            ("Matched", breakdown["matched"]), ("Not matched", breakdown["not_matched"]),
+            ("Other", breakdown["other"]),
+        ], "Pretraining Breakdown")
+        horizontal_bar(output_dir / f"{stem}_missed.png", breakdown["top_missed"], "Top Missed Statements", 15)
+        horizontal_bar(output_dir / f"{stem}_extra.png", breakdown["top_extra"], "Top Extra Statements", 15)
+    return path

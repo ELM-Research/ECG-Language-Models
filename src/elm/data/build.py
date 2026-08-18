@@ -8,21 +8,23 @@ from elm.utils.parallelism import get_rank, get_world_size, is_main
 from elm.utils.constants import ECG_TOKEN_PLACEHOLDER, RL_TOKENS
 
 class DataBuilder:
-    def __init__(self, config: dict):
-        data, model, training = config["data"], config["model"], config["training"]
+    def __init__(self, config: dict, training: bool = True):
+        data, model, training_config = config["data"], config["model"], config["training"]
+        runtime = config["training" if training else "evaluation"]
+        self.is_training = training
         self.data_names = data["data_names"]
         self.split_names = data["split_names"]
         self.llm_tokenizer_name = model["language_model"]
         self.truncation_length = model["truncation_length"]
         self.num_ecg_tokens = model["num_ecg_tokens"]
-        self.batch_size = training["batch_size"]
-        self.num_workers = training["num_workers"]
-        self.training_stage = training["training_stage"]
+        self.batch_size = runtime["batch_size"]
+        self.num_workers = runtime["num_workers"]
+        self.training_stage = training_config["training_stage"]
         self.enable_thinking = config["enable_thinking"]
         self.system_prompt_path = config["system_prompt_path"]
         self.modality = config["modality"]
         self.seed = config["seed"]
-        self.augmentation = config["augment_ecg"]
+        self.augmentation = config["augment_ecg"] and self.is_training
         self.perturbation = config["perturbation"]
         self.development = config["development"]
 
@@ -37,14 +39,14 @@ class DataBuilder:
         sampler = self.get_torch_dataloader_sampler(torch_dataset)
         return DataLoader(
             torch_dataset,
-            batch_size = self.batch_size if self.training_stage else 1,
-            shuffle = (sampler is None) if self.training_stage else False,
-            num_workers = self.num_workers if self.training_stage else 0,
+            batch_size=self.batch_size,
+            shuffle=sampler is None and self.is_training,
+            num_workers=self.num_workers,
             sampler=sampler,
             pin_memory=torch.cuda.is_available(),
             collate_fn = DataCollatorForSeq2Seq(llm_tokenizer,
                                                 label_pad_token_id=-100),
-            persistent_workers=(self.num_workers > 0),
+            persistent_workers=self.is_training and self.num_workers > 0,
             prefetch_factor=4 if self.num_workers > 0 else None,
         )
 
@@ -133,7 +135,7 @@ class DataBuilder:
         print("-" * 20)
 
 
-def build_data(config: dict):
-    builder = DataBuilder(config)
+def build_data(config: dict, training: bool = True):
+    builder = DataBuilder(config, training)
     tokenizer = builder.build_llm_tokenizer()
     return tokenizer, builder.build_dataloader(tokenizer)
