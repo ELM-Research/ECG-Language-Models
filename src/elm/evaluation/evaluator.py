@@ -232,31 +232,10 @@ def print_metrics(result: dict) -> None:
             print(f"  {name}: {value:.4f}")
 
 
-def horizontal_bar(path: Path, items, title: str, top_k: int = 10) -> None:
-    items = list(items)[:top_k]
-    if not items:
-        return
-    labels, values = zip(*reversed(items))
-    figure, axis = plt.subplots(figsize=(10, max(3, 0.45 * len(labels) + 1.5)))
-    axis.barh([str(label)[:80] for label in labels], values)
-    axis.set_xlabel("Count")
-    axis.set_title(title)
-    figure.tight_layout()
-    figure.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(figure)
-
-
 def save_run(result: dict, output_dir: Path, fold, seed) -> Path:
     stem = f"fold_{fold}_seed_{seed}"
     path = output_dir / f"{stem}.json"
     payload = {"fold": fold, "seed": seed, **result}
-    answer_references = payload.pop("answer_references")
-    answer_hypotheses = payload.pop("answer_hypotheses")
     with path.open("w") as file:
         json.dump(payload, file, indent=2)
-
-    horizontal_bar(output_dir / f"{stem}_incorrect.png",
-                   Counter(hypothesis for reference, hypothesis in zip(answer_references, answer_hypotheses)
-                           if reference != hypothesis).most_common(),
-                   "Top Incorrect Predictions")
     return path

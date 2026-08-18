@@ -12,6 +12,7 @@ from transformers import (
 )
 from elm.model.siglep import SigLEP, SigLEPConfig
 from elm.utils.constants import ECG_TOKEN_PLACEHOLDER
+from elm.utils.parallelism import is_main
 
 class OrahConfig(PretrainedConfig):
     # HuggingFace Pretrained Config Variables
@@ -213,7 +214,7 @@ def build(config, tokenizer):
     if model.get_input_embeddings().num_embeddings != len(tokenizer):
         model.resize_token_embeddings(len(tokenizer))
     model.set_trainable(model_config.get("trainable", model.config.trainable))
-    if isinstance(model.language_model, PeftModel):
+    if isinstance(model.language_model, PeftModel) and is_main():
         model.language_model.print_trainable_parameters()
     return model
 
