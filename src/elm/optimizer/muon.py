@@ -5,8 +5,7 @@ import math
 import torch
 from peft import PeftModel
 from torch import nn
-from torch import distributed
-from torch.distributed.tensor import DTensor
+from torch.distributed.tensor import DTensor, distribute_tensor
 
 
 def orthogonalize(gradient, steps):
@@ -38,16 +37,12 @@ def muon_update(parameter, state, group, index):
         raise ValueError("Muon supports only a one-dimensional FSDP2 mesh")
 
     mesh = update.device_mesh
-    process_group = mesh.get_group()
-    destination = distributed.get_global_rank(process_group, index % mesh.size())
-    shards = [torch.zeros_like(update.to_local()) for _ in range(mesh.size())] if mesh.get_rank() == destination else None
-    distributed.gather(update.to_local(), shards, dst=destination, group=process_group)
-    if mesh.get_rank() == destination:
-        full_update = torch.cat(shards)
+    destination = index % mesh.size()
+    full_update = update.full_tensor()
+    if mesh.get_local_rank() == destination:
         full_update.copy_(orthogonalize(full_update, group["ns_steps"]))
-        distributed.scatter(update.to_local(), list(full_update.chunk(mesh.size())), src=destination, group=process_group)
-    else:
-        distributed.scatter(update.to_local(), None, src=destination, group=process_group)
+    update = distribute_tensor(full_update, mesh, update.placements,
+                               src_data_rank=destination)
     return scale_update(update)
 
 
