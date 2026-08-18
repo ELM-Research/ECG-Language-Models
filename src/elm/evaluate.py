@@ -33,20 +33,20 @@ def main() -> None:
     for fold in folds:
         current = fold_config(config, fold)
         set_seed(seeds[0])
-        tokenizer, dataloader = build_data(current, training=False)
+        tokenizer, dataset = build_data(current, training=False)
         model = setup_model(build_model(current, tokenizer), None)
 
         for seed in seeds:
             print(f"Evaluating fold {fold} with seed {seed}")
             set_seed(seed)
-            result = evaluate(model, dataloader, tokenizer, current)
+            result = evaluate(model, dataset, tokenizer, current)
             path = save_run(result, run_dir, fold, seed)
             run_summaries.append({
                 "fold": fold, "seed": seed, "num_pairs": result["num_pairs"],
                 "metrics": result["metrics"], "file": path.name,
             })
 
-        del model, dataloader, tokenizer
+        del model, dataset, tokenizer
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

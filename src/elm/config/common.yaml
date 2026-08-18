@@ -6,15 +6,12 @@ gpu:
   strategy: fsdp2 # null for one device, fsdp2 for multiple devices
 
 training:
-  epochs: 1
-  gradient_accumulation_steps: 1
   max_grad_norm: 1.0
   num_workers: 16
   save_steps: 500
 
 optimizer:
   name: muon
-  learning_rate: 1.0e-3
   weight_decay: 0.05
   scheduler: cosine
   warmup_ratio: 0.03
@@ -48,9 +45,14 @@ perturbation: null
 # Modality
 modality: signal
 
-enable_thinking: false
+explicit_thinking: false
 
-system_prompt_path: src/elm/config/system_prompts/think.txt
+evaluation:
+  folds: [1]
+  seeds: [0]
+  max_new_tokens: 512
+  do_sample: false
+  output_dir: src/elm/results
 
 model:
   name: orah

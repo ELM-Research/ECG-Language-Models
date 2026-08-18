@@ -1,5 +1,4 @@
 from elm.utils.constants import (
-    ECG_TOKEN_PLACEHOLDER,
     IMAGE_WORD_RE,
     LEADING_PREFIX_RE,
     ROLES,
@@ -31,65 +30,98 @@ def normalize_text(text: list[dict], system_prompt: str = None) -> list[dict[str
 
 class Text:
     def __init__(self, llm_tokenizer, truncation_length, training_stage,
-                 system_prompt_path=None, truncate=True, enable_thinking=False):
+                 system_prompt_path=None, truncate=True, explicit_thinking=False):
         self.llm_tokenizer = llm_tokenizer
         self.truncation_length = truncation_length
         self.training_stage = training_stage
         self.truncate = truncate
-        self.enable_thinking = enable_thinking
+        self.explicit_thinking = explicit_thinking
         self.system_prompt = None
         if system_prompt_path:
             with open(system_prompt_path, encoding="utf-8") as file:
                 self.system_prompt = file.read()
 
     def __call__(self, text, ecg_token_placeholders):
+        if self.training_stage is None:
+            return self.prepare_evaluation(text, ecg_token_placeholders)
         if self.training_stage == "pretrain":
             return self.prepare_pretrain(text, ecg_token_placeholders)
         if self.training_stage in ("sft", "rl"):
             return self.prepare_sft(text, ecg_token_placeholders)
         raise ValueError(f"Unknown training stage: {self.training_stage}")
 
+    def prepare_evaluation(self, text, ecg_token_placeholders):
+        if isinstance(text, str):
+            return {"prompt": ecg_token_placeholders, "reference": text}
+        messages = normalize_text(text, self.system_prompt)
+        user = next((message for message in messages if message["role"] == "user"), None)
+        if user is None:
+            raise ValueError("A chat example must contain a user message")
+        user["content"] = ecg_token_placeholders + user["content"]
+        return {"messages": messages}
+
     def prepare_pretrain(self, text, ecg_token_placeholders):
         # Qwen 3.5 pretraining documents have no BOS or EOS. The pad token is
         # the document separator, so it is part of the sequence and its loss.
-        input_ids = self.llm_tokenizer.encode(
-            f"{ecg_token_placeholders}{text}", add_special_tokens=False,
-        )
+        prompt_ids = self.llm_tokenizer.encode(
+            ecg_token_placeholders, add_special_tokens=False)
+        response_ids = self.llm_tokenizer.encode(text, add_special_tokens=False)
         if self.truncate:
-            input_ids = input_ids[:self.truncation_length - 1]
-        input_ids.append(self.llm_tokenizer.pad_token_id)
-        ecg_token = self.llm_tokenizer.convert_tokens_to_ids(ECG_TOKEN_PLACEHOLDER)
+            available = self.truncation_length - len(prompt_ids) - 1
+            if available < 0:
+                raise ValueError("The ECG condition exceeds the truncation length")
+            response_ids = response_ids[:available]
+        separator = self.llm_tokenizer.pad_token_id
         return {
-            "input_ids": input_ids,
-            "attention_mask": [1] * len(input_ids),
-            "labels": [-100 if token == ecg_token else token for token in input_ids],
+            "input_ids": prompt_ids + response_ids + [separator],
+            "attention_mask": [1] * (len(prompt_ids) + len(response_ids) + 1),
+            "labels": [-100] * len(prompt_ids) + response_ids + [separator],
         }
 
     def prepare_sft(self, text, ecg_token_placeholders):
         # The tokenizer's chat template owns all thinking-tag serialization.
         normalized_text = normalize_text(text, self.system_prompt)
         user = next((turn for turn in normalized_text if turn["role"] == "user"), None)
+        if user is None:
+            raise ValueError("A chat example must contain a user message")
+        if not normalized_text or normalized_text[-1]["role"] != "assistant":
+            raise ValueError("An SFT example must end with an assistant response")
         user["content"] = ecg_token_placeholders + user["content"]
-        tokenized_text = self.llm_tokenizer.apply_chat_template(
-            normalized_text,
-            tokenize=True,
-            truncation=self.truncate,
-            max_length=self.truncation_length,
-            return_dict=True,
-            add_generation_prompt=False,
+
+        prompt = self.llm_tokenizer.apply_chat_template(
+            normalized_text[:-1], tokenize=False, add_generation_prompt=True,
+            enable_thinking=True,
         )
-        input_ids = tokenized_text["input_ids"]
-        assistant_header = self.llm_tokenizer.encode(
-            "<|im_start|>assistant\n", add_special_tokens=False)
+        think_prompt = f"{THINK_START}\n"
+        if not self.explicit_thinking:
+            if not prompt.endswith(think_prompt):
+                raise ValueError("The chat template did not provide the expected generation prompt")
+            prompt = prompt[:-len(think_prompt)]
+
+        conversation = self.llm_tokenizer.apply_chat_template(
+            normalized_text, tokenize=False, add_generation_prompt=False,
+        )
+        if not conversation.startswith(prompt):
+            raise ValueError("The generation prompt does not match the assistant response")
+
+        prompt_ids = self.llm_tokenizer.encode(prompt, add_special_tokens=False)
+        response_ids = self.llm_tokenizer.encode(
+            conversation[len(prompt):], add_special_tokens=False)
         im_end = self.llm_tokenizer.convert_tokens_to_ids("<|im_end|>")
-        think_start = self.llm_tokenizer.convert_tokens_to_ids(THINK_START)
-        labels = [-100] * len(input_ids)
-        for response_start in (i + len(assistant_header) for i in range(len(input_ids))
-                               if input_ids[i:i + len(assistant_header)] == assistant_header):
-            response_end = next((i + 1 for i in range(response_start, len(input_ids))
-                                 if input_ids[i] == im_end), len(input_ids))
-            if self.enable_thinking and input_ids[response_start:response_start + 1] == [think_start]:
-                response_start += 1
-            labels[response_start:response_end] = input_ids[response_start:response_end]
-        tokenized_text["labels"] = labels
-        return tokenized_text
+        if im_end not in response_ids:
+            raise ValueError("The chat template did not terminate the assistant response")
+        response_ids = response_ids[:response_ids.index(im_end) + 1]
+        input_ids = prompt_ids + response_ids
+        labels = [-100] * len(prompt_ids) + response_ids
+        if self.truncate:
+            input_ids = input_ids[:self.truncation_length]
+            labels = labels[:self.truncation_length]
+        if all(label == -100 for label in labels):
+            raise ValueError("No assistant response fits within the tokenized sequence")
+        if labels[-1] != im_end:
+            raise ValueError("The assistant response exceeds the truncation length")
+        return {
+            "input_ids": input_ids,
+            "attention_mask": [1] * len(input_ids),
+            "labels": labels,
+        }

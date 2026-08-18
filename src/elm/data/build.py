@@ -5,28 +5,27 @@ from torch.utils.data.distributed import DistributedSampler
 from transformers import AutoTokenizer, DataCollatorForSeq2Seq
 from datasets import load_dataset
 from elm.utils.parallelism import get_rank, get_world_size, is_main
-from elm.utils.constants import ECG_TOKEN_PLACEHOLDER, RL_TOKENS
+from elm.utils.constants import ECG_TOKEN_PLACEHOLDER, RL_TOKENS, ROLES
 
 class DataBuilder:
     def __init__(self, config: dict, training: bool = True):
         data, model, training_config = config["data"], config["model"], config["training"]
-        runtime = config["training" if training else "evaluation"]
         self.is_training = training
         self.data_names = data["data_names"]
         self.split_names = data["split_names"]
         self.llm_tokenizer_name = model["language_model"]
         self.truncation_length = model["truncation_length"]
         self.num_ecg_tokens = model["num_ecg_tokens"]
-        self.batch_size = training_config["batch_size"] if training else 1
-        self.num_workers = runtime["num_workers"]
+        self.batch_size = training_config["batch_size"]
+        self.num_workers = training_config["num_workers"]
         self.training_stage = training_config["training_stage"]
-        self.system_prompt_path = config["system_prompt_path"]
+        self.system_prompt_path = config.get("system_prompt_path")
         self.modality = config["modality"]
         self.seed = config["seed"]
         self.augmentation = config["augment_ecg"] and self.is_training
         self.perturbation = config["perturbation"]
         self.development = config["development"]
-        self.enable_thinking = config["enable_thinking"]
+        self.explicit_thinking = config.get("explicit_thinking", False)
 
     ### TORCH DATALOADER
     def build_dataloader(self, llm_tokenizer=None):
@@ -64,19 +63,39 @@ class DataBuilder:
         for data_name, split_name in zip(self.data_names, self.split_names):
             dataset = self.build_hf_dataset(data_name, split_name)
             data.extend(dataset)
+        if self.is_training and self.training_stage == "sft":
+            data = self.split_sft_turns(data)
         if is_main(): print(f"Length of Dataset: {len(data)}", f"Using {self.modality} modality")
-        # RL and evaluation need complete references; generation only uses their prompt prefixes.
         text_preparer = Text(llm_tokenizer,
                              self.truncation_length,
-                             self.training_stage,
+                             self.training_stage if self.is_training else None,
                              system_prompt_path=self.system_prompt_path,
                              truncate=self.is_training and self.training_stage != "rl",
-                             enable_thinking=self.enable_thinking)
+                             explicit_thinking=self.explicit_thinking)
+        if self.is_training and self.development and is_main() and data:
+            placeholders = ("" if self.perturbation == "only_text"
+                            else ECG_TOKEN_PLACEHOLDER * self.num_ecg_tokens + "\n")
+            self.print_training_example(text_preparer(data[0]["text"], placeholders), llm_tokenizer)
         ecg_modality_preparer = self.build_ecg_modality()
         torch_dataset = ELMDataset(data, ecg_modality_preparer, text_preparer,
                              augmentation = self.augmentation,
                              perturbation = self.perturbation)
         return torch_dataset
+
+    def split_sft_turns(self, data):
+        examples = []
+        for instance in data:
+            messages = instance["text"]
+            if not isinstance(messages, list):
+                raise ValueError("SFT text must be a list of messages")
+            num_examples = len(examples)
+            for end, message in enumerate(messages, 1):
+                role = next((message[key] for key in ("role", "from") if key in message), None)
+                if isinstance(role, str) and ROLES.get(role.strip().lower()) == "assistant":
+                    examples.append({**instance, "text": messages[:end]})
+            if len(examples) == num_examples:
+                raise ValueError("An SFT conversation must contain an assistant response")
+        return examples
 
     def build_ecg_modality(self,):
         if self.modality == "signal":
@@ -125,6 +144,19 @@ class DataBuilder:
         return llm_tokenizer
 
     ### DEV FUNCTIONS ###
+    def print_training_example(self, example, tokenizer):
+        input_ids = example["input_ids"]
+        labels = example["labels"]
+        response_start = next(i for i, label in enumerate(labels) if label != -100)
+        target_ids = [label for label in labels[response_start:] if label != -100]
+        print(f"\n=== Training formulation ({self.training_stage}) ===")
+        print(f"explicit_thinking: {self.explicit_thinking}")
+        print(f"prompt tokens: {response_start}; target tokens: {len(target_ids)}")
+        print("[Prompt]")
+        print(tokenizer.decode(input_ids[:response_start], skip_special_tokens=False))
+        print("[Supervised target]")
+        print(tokenizer.decode(target_ids, skip_special_tokens=False))
+
     def print_llm_tokenizer_info(self, llm_tokenizer):
         print("Vocab Size:", len(llm_tokenizer))
         print("special_tokens_map:", llm_tokenizer.special_tokens_map)
@@ -140,4 +172,7 @@ class DataBuilder:
 def build_data(config: dict, training: bool = True):
     builder = DataBuilder(config, training)
     tokenizer = builder.build_llm_tokenizer()
-    return tokenizer, builder.build_dataloader(tokenizer)
+    dataset = builder.build_torch_dataset(tokenizer)
+    if training:
+        dataset = builder.build_torch_dataloader(dataset, tokenizer)
+    return tokenizer, dataset

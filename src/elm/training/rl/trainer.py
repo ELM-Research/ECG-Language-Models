@@ -30,7 +30,8 @@ def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, tokenizer
     for step, batch in enumerate(progress):
         batch = move_to_device(batch, device)
         for item in range(batch["input_ids"].shape[0]):
-            rollout = rollout_group(model, batch, item, tokenizer, rl, config["enable_thinking"])
+            rollout = rollout_group(
+                model, batch, item, tokenizer, rl, config.get("explicit_thinking", False))
             rollouts.append(rollout)
 
         update = (step + 1) % accumulation_steps == 0 or step + 1 == len(dataloader)

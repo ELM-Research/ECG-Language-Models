@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 ROUGE_SCORER = RougeScorer(["rougeL"], use_stemmer=True)
 
 
-def split_response(text: str) -> tuple[str, str]:
+def split_response(text: str, explicit_thinking: bool = False) -> tuple[str, str]:
     thinking = ""
     answer = text
     if "<think>" in text:
@@ -30,6 +30,8 @@ def split_response(text: str) -> tuple[str, str]:
             return thinking.strip(), ""
     elif "</think>" in text:
         thinking, _, answer = text.partition("</think>")
+    elif explicit_thinking and "<answer>" not in text:
+        return text.strip(), ""
 
     if "<answer>" in answer:
         _, _, answer = answer.partition("<answer>")
@@ -82,57 +84,31 @@ def evaluate_strings(references: list[str], hypotheses: list[str]) -> dict[str, 
     }
 
 
-def classification_metrics(references: list[str], hypotheses: list[str]) -> tuple[dict, dict, dict]:
-    classes = sorted(set(references))
-    other_counts = Counter(hypothesis for hypothesis in hypotheses if hypothesis not in classes)
-    other_label = "Other"
-    while other_label in classes:
-        other_label = f"_{other_label}"
-    predictions = [hypothesis if hypothesis in classes else other_label for hypothesis in hypotheses]
-    columns = classes + ([other_label] if other_counts else [])
-    counts = Counter(zip(references, predictions))
-    confusion = {reference: {prediction: counts[reference, prediction] for prediction in columns}
-                 for reference in classes}
-    accuracy = {
-        label: counts[label, label] / max(sum(reference == label for reference in references), 1)
-        for label in classes
-    }
-    return accuracy, confusion, dict(other_counts)
+def chat_prompt(tokenizer, messages: list[dict], explicit_thinking: bool) -> str:
+    prompt = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+        enable_thinking=True,
+    )
+    if not explicit_thinking:
+        think_prompt = "<think>\n"
+        if not prompt.endswith(think_prompt):
+            raise ValueError("The chat template did not provide the expected generation prompt")
+        prompt = prompt[:-len(think_prompt)]
+    return prompt
 
 
-def response_ranges(labels: torch.Tensor) -> list[tuple[int, int]]:
-    indices = labels.ne(-100).nonzero(as_tuple=True)[0].tolist()
-    if not indices:
-        return []
-
-    ranges = []
-    start = previous = indices[0]
-    for index in indices[1:]:
-        if index != previous + 1:
-            ranges.append((start, previous + 1))
-            start = index
-        previous = index
-    ranges.append((start, previous + 1))
-    return ranges
-
-
-def prepare_evaluation(batch: dict, tokenizer) -> list[dict]:
-    jobs = []
-    input_ids = batch["input_ids"][0]
-    attention_mask = batch["attention_mask"][0]
-    labels = batch["labels"][0]
-    for start, end in response_ranges(labels):
-        prompt_ids = input_ids[:start]
-        job = {
-            "input_ids": prompt_ids.unsqueeze(0),
-            "attention_mask": attention_mask[:start].unsqueeze(0),
-            "prompt": tokenizer.decode(prompt_ids, skip_special_tokens=True).strip(),
-            "reference": tokenizer.decode(labels[start:end], skip_special_tokens=True).strip(),
-        }
-        if "ecg_values" in batch:
-            job["ecg_values"] = batch["ecg_values"]
-        jobs.append(job)
-    return jobs
+def reference_response(tokenizer, messages: list[dict], prompt: str) -> str:
+    conversation = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=False,
+    )
+    if not conversation.startswith(prompt):
+        raise ValueError("The generation prompt does not match the reference conversation")
+    response_ids = tokenizer.encode(conversation[len(prompt):], add_special_tokens=False)
+    return tokenizer.decode(response_ids, skip_special_tokens=True).strip()
 
 
 def eos_ids(model, tokenizer) -> list[int]:
@@ -145,16 +121,18 @@ def eos_ids(model, tokenizer) -> list[int]:
     return sorted(set(ids))
 
 
-def generate_response(model, job: dict, tokenizer, evaluation: dict) -> str:
+def generate_response(model, input_ids: list[int], ecg_values, tokenizer, evaluation: dict) -> str:
+    device = next(model.parameters()).device
+    input_ids = torch.tensor(input_ids, dtype=torch.long, device=device).unsqueeze(0)
     stop_ids = eos_ids(model, tokenizer)
     generation = {
-        "input_ids": job["input_ids"],
-        "attention_mask": job["attention_mask"],
+        "input_ids": input_ids,
+        "attention_mask": torch.ones_like(input_ids),
         "max_new_tokens": evaluation["max_new_tokens"],
         "do_sample": evaluation["do_sample"],
     }
-    if "ecg_values" in job:
-        generation["ecg_values"] = job["ecg_values"]
+    if ecg_values is not None:
+        generation["ecg_values"] = torch.as_tensor(ecg_values, device=device).unsqueeze(0)
     if stop_ids:
         generation["eos_token_id"] = stop_ids
     if tokenizer.pad_token_id is not None:
@@ -163,35 +141,78 @@ def generate_response(model, job: dict, tokenizer, evaluation: dict) -> str:
         generation["temperature"] = evaluation.get("temperature", 1.0)
 
     output = model.generate(**generation)[0]
-    prompt_length = job["input_ids"].shape[1]
-    if output.shape[0] >= prompt_length and torch.equal(output[:prompt_length], job["input_ids"][0]):
+    prompt_length = input_ids.shape[1]
+    if output.shape[0] >= prompt_length and torch.equal(output[:prompt_length], input_ids[0]):
         output = output[prompt_length:]
     stop = next((index for index, token in enumerate(output.tolist()) if token in stop_ids), len(output))
     return tokenizer.decode(output[:stop], skip_special_tokens=True).strip()
 
 
-def evaluate(model, dataloader, tokenizer, config: dict) -> dict:
+def print_generation(example: int, turn: int, prompt: str, reference: str,
+                     hypothesis: str, explicit_thinking: bool) -> None:
+    print(f"\n=== Evaluation formulation (example {example}, turn {turn}) ===")
+    print(f"explicit_thinking: {explicit_thinking}")
+    print("[Prompt]")
+    print(prompt)
+    print("[Reference]")
+    print(reference)
+    print("[Generated response]")
+    print(hypothesis)
+
+
+def evaluate(model, dataset, tokenizer, config: dict) -> dict:
     model.eval()
-    device = next(model.parameters()).device
     records = []
-    progress = tqdm(dataloader, desc="Evaluation", leave=False)
+    explicit_thinking = config.get("explicit_thinking", False)
+    progress = tqdm(dataset, desc="Evaluation", leave=False)
     with torch.inference_mode():
-        for batch_index, batch in enumerate(progress):
-            batch = {key: value.to(device) for key, value in batch.items()}
-            jobs = prepare_evaluation(batch, tokenizer)
-            for job in jobs:
-                hypothesis = generate_response(model, job, tokenizer, config["evaluation"])
+        for example_index, example in enumerate(progress):
+            ecg_values = example.get("ecg_values")
+            if "messages" not in example:
+                prompt = example["prompt"]
+                reference = example["reference"]
+                input_ids = tokenizer.encode(example["prompt"], add_special_tokens=False)
+                hypothesis = generate_response(
+                    model, input_ids, ecg_values, tokenizer, config["evaluation"])
                 records.append({
-                    "prompt": job["prompt"], "reference": job["reference"],
+                    "prompt": prompt, "reference": reference,
                     "hypothesis": hypothesis,
                 })
-            if config["development"] and batch_index == 0:
+                if config["development"]:
+                    print_generation(
+                        example_index + 1, 1, prompt, reference, hypothesis, explicit_thinking)
+            else:
+                history = []
+                turn = 0
+                for message in example["messages"]:
+                    if message["role"] != "assistant":
+                        history.append(message)
+                        continue
+
+                    turn += 1
+                    prompt = chat_prompt(tokenizer, history, explicit_thinking)
+                    input_ids = tokenizer.encode(prompt, add_special_tokens=False)
+                    reference = reference_response(tokenizer, [*history, message], prompt)
+                    hypothesis = generate_response(
+                        model, input_ids, ecg_values, tokenizer, config["evaluation"])
+                    records.append({
+                        "prompt": prompt,
+                        "reference": reference,
+                        "hypothesis": hypothesis,
+                    })
+                    if config["development"]:
+                        print_generation(
+                            example_index + 1, turn, prompt, reference, hypothesis,
+                            explicit_thinking)
+                    content = f"<think>\n{hypothesis}" if explicit_thinking else hypothesis
+                    history.append({"role": "assistant", "content": content})
+            if config["development"] and example_index == 0:
                 break
 
     references = [record["reference"] for record in records]
     hypotheses = [record["hypothesis"] for record in records]
-    reference_parts = [split_response(text) for text in references]
-    hypothesis_parts = [split_response(text) for text in hypotheses]
+    reference_parts = [split_response(text, explicit_thinking) for text in references]
+    hypothesis_parts = [split_response(text, explicit_thinking) for text in hypotheses]
     answer_references = [parts[1] for parts in reference_parts]
     answer_hypotheses = [parts[1] for parts in hypothesis_parts]
     metrics = {"answer": evaluate_strings(answer_references, answer_hypotheses)}
@@ -206,48 +227,8 @@ def evaluate(model, dataloader, tokenizer, config: dict) -> dict:
         "num_pairs": len(records), "metrics": metrics, "predictions": records,
         "answer_references": answer_references, "answer_hypotheses": answer_hypotheses,
     }
-    if config["training"]["training_stage"] == "pretrain" and answer_references:
-        result["pretrain_breakdown"] = pretrain_breakdown(answer_references, answer_hypotheses)
-    classification = config["evaluation"].get("classification")
-    if classification is None:
-        classification = any("ecg-comp" in name.lower() for name in config["data"]["data_names"])
-    if classification and answer_references:
-        accuracy, confusion, other = classification_metrics(answer_references, answer_hypotheses)
-        metrics["per_class_accuracy"] = accuracy
-        result.update(confusion_matrix=confusion, other_output_counts=other)
     print_metrics(result)
     return result
-
-
-def pretrain_breakdown(references: list[str], hypotheses: list[str]) -> dict:
-    def statements(text):
-        return {part.strip() for part in text.split(";") if part.strip()}
-
-    counts = Counter()
-    missed = Counter()
-    extra = Counter()
-    for reference, hypothesis in zip(references, hypotheses):
-        expected, predicted = statements(reference), statements(hypothesis)
-        if not predicted:
-            counts["other"] += 1
-            continue
-        if expected == predicted:
-            counts["matched"] += 1
-            continue
-        missing, added = expected - predicted, predicted - expected
-        counts["missed"] += bool(missing)
-        counts["extra"] += bool(added)
-        counts["both" if missing and added else "only_missed" if missing else "only_extra"] += 1
-        missed.update(missing)
-        extra.update(added)
-    total = len(references)
-    return {
-        "total": total, "matched": counts["matched"], "other": counts["other"],
-        "not_matched": total - counts["matched"] - counts["other"],
-        "missed": counts["missed"], "extra": counts["extra"],
-        "only_missed": counts["only_missed"], "only_extra": counts["only_extra"], "both": counts["both"],
-        "top_missed": missed.most_common(15), "top_extra": extra.most_common(15),
-    }
 
 
 def run_statistical_analysis(results: list[dict]) -> dict:
@@ -292,26 +273,6 @@ def horizontal_bar(path: Path, items, title: str, top_k: int = 10) -> None:
     plt.close(figure)
 
 
-def save_confusion_matrix(confusion: dict, path: Path) -> None:
-    rows = list(confusion)
-    columns = list(next(iter(confusion.values())))
-    matrix = np.array([[confusion[row][column] for column in columns] for row in rows])
-    totals = matrix.sum(axis=1, keepdims=True)
-    normalized = np.divide(matrix, totals, out=np.zeros_like(matrix, dtype=float), where=totals != 0)
-    figure, axis = plt.subplots(figsize=(max(4, len(columns) * 1.5), max(4, len(rows) * 1.5)))
-    axis.imshow(normalized, cmap="Blues", vmin=0, vmax=1)
-    for row in range(len(rows)):
-        for column in range(len(columns)):
-            color = "white" if normalized[row, column] > 0.5 else "black"
-            axis.text(column, row, f"{matrix[row, column]}\n({normalized[row, column]:.1%})",
-                      ha="center", va="center", color=color)
-    axis.set(xticks=range(len(columns)), yticks=range(len(rows)), xticklabels=columns, yticklabels=rows,
-             xlabel="Predicted", ylabel="True", title="Confusion Matrix")
-    figure.tight_layout()
-    figure.savefig(path, dpi=150)
-    plt.close(figure)
-
-
 def save_run(result: dict, output_dir: Path, fold, seed) -> Path:
     stem = f"fold_{fold}_seed_{seed}"
     path = output_dir / f"{stem}.json"
@@ -325,16 +286,4 @@ def save_run(result: dict, output_dir: Path, fold, seed) -> Path:
                    Counter(hypothesis for reference, hypothesis in zip(answer_references, answer_hypotheses)
                            if reference != hypothesis).most_common(),
                    "Top Incorrect Predictions")
-    if "confusion_matrix" in result:
-        save_confusion_matrix(result["confusion_matrix"], output_dir / f"{stem}_confusion.png")
-        horizontal_bar(output_dir / f"{stem}_other.png",
-                       Counter(result["other_output_counts"]).most_common(), "Top Other Outputs")
-    if "pretrain_breakdown" in result:
-        breakdown = result["pretrain_breakdown"]
-        horizontal_bar(output_dir / f"{stem}_pretrain.png", [
-            ("Matched", breakdown["matched"]), ("Not matched", breakdown["not_matched"]),
-            ("Other", breakdown["other"]),
-        ], "Pretraining Breakdown")
-        horizontal_bar(output_dir / f"{stem}_missed.png", breakdown["top_missed"], "Top Missed Statements", 15)
-        horizontal_bar(output_dir / f"{stem}_extra.png", breakdown["top_extra"], "Top Extra Statements", 15)
     return path
