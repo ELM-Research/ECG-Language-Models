@@ -12,15 +12,6 @@ training:
   num_workers: 16
   save_steps: 500
 
-evaluation:
-  folds: [1]
-  seeds: [0]
-  split_names: ["fold{fold}_test"]
-  num_workers: 0
-  max_new_tokens: 512
-  do_sample: false
-  output_dir: src/results
-
 optimizer:
   name: muon
   learning_rate: 1.0e-3

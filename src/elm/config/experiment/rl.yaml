@@ -16,7 +16,6 @@ optimizer:
   scheduler: constant_with_warmup
 
 model:
-  checkpoint: src/runs/sft_stage2/0/checkpoints/epoch_best
   trainable: [language_model]
 
 data:

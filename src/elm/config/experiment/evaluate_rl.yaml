@@ -2,7 +2,17 @@ defaults:
   - ./rl.yaml
 
 model:
-  checkpoint: src/runs/rl/0/checkpoints/epoch_best
+  checkpoint: null
+
+gpu:
+  strategy: null # null for one device, fsdp2 for multiple devices
 
 evaluation:
+  folds: [1]
+  seeds: [0]
+  split_names: ["fold{fold}_test"]
+  num_workers: 0
+  max_new_tokens: 512
+  do_sample: false
+  output_dir: src/elm/results
   max_new_tokens: 1024
