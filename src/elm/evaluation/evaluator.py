@@ -1,5 +1,4 @@
 import json
-import re
 import string
 from collections import Counter
 from collections.abc import Mapping
@@ -18,24 +17,25 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-THINK_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
-ANSWER_RE = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
 ROUGE_SCORER = RougeScorer(["rougeL"], use_stemmer=True)
 
 
 def split_response(text: str) -> tuple[str, str]:
-    if "</think>" in text and "<think>" not in text:
-        text = f"<think>{text}"
-    thinking = THINK_RE.search(text)
-    answer = ANSWER_RE.search(text)
-    thinking_text = thinking.group(1).strip() if thinking else ""
-    if answer:
-        answer_text = answer.group(1)
-    elif thinking:
-        answer_text = text[thinking.end():]
-    else:
-        answer_text = text
-    return thinking_text, answer_text.strip()
+    thinking = ""
+    answer = text
+    if "<think>" in text:
+        _, _, thinking_and_answer = text.partition("<think>")
+        thinking, closed, answer = thinking_and_answer.partition("</think>")
+        if not closed:
+            return thinking.strip(), ""
+    elif "</think>" in text:
+        thinking, _, answer = text.partition("</think>")
+
+    if "<answer>" in answer:
+        _, _, answer = answer.partition("<answer>")
+    if "</answer>" in answer:
+        answer, _, _ = answer.partition("</answer>")
+    return thinking.strip(), answer.strip()
 
 
 def normalize(text: str) -> str:

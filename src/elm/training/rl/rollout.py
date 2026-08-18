@@ -24,6 +24,15 @@ def _decode_for_reward(tokenizer, ids: torch.Tensor, strip_ids: set) -> str:
     return tokenizer.decode(kept, skip_special_tokens=False).strip()
 
 
+def final_response_range(labels: torch.Tensor) -> tuple[int, int]:
+    indices = labels.ne(-100).nonzero(as_tuple=True)[0]
+    if indices.numel() == 0:
+        raise ValueError("No response tokens found (labels all -100)")
+    gaps = (indices[1:] != indices[:-1] + 1).nonzero(as_tuple=True)[0]
+    start = indices[gaps[-1] + 1] if gaps.numel() else indices[0]
+    return start.item(), indices[-1].item() + 1
+
+
 def log_prob_at_response(model, ids, attn, ecg, pL: int, temperature: float) -> torch.Tensor:
     targets = ids[:, pL:]
     was_training = model.training
@@ -64,11 +73,10 @@ def rollout_group(
     strip_ids = eos_ids | {int(pad_id)}
 
     labels = batch["labels"][item_idx]
-    nz = (labels != -100).nonzero(as_tuple=True)[0]
-    if nz.numel() == 0:
-        raise ValueError("No response tokens found (labels all -100).")
-    rs = nz[0].item()
-    gt_text = _decode_for_reward(tokenizer, labels[nz], strip_ids)
+    rs, re = final_response_range(labels)
+    if labels[re - 1].item() != im_end_id:
+        raise ValueError("RL target was truncated before <|im_end|>")
+    gt_text = _decode_for_reward(tokenizer, labels[rs:re], strip_ids)
 
     prompt_ids = batch["input_ids"][item_idx, :rs]
     prompt_attn = batch["attention_mask"][item_idx, :rs]

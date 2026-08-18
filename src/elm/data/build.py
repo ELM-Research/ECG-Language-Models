@@ -26,6 +26,7 @@ class DataBuilder:
         self.augmentation = config["augment_ecg"] and self.is_training
         self.perturbation = config["perturbation"]
         self.development = config["development"]
+        self.enable_thinking = config["enable_thinking"]
 
     ### TORCH DATALOADER
     def build_dataloader(self, llm_tokenizer=None):
@@ -64,10 +65,13 @@ class DataBuilder:
             dataset = self.build_hf_dataset(data_name, split_name)
             data.extend(dataset)
         if is_main(): print(f"Length of Dataset: {len(data)}", f"Using {self.modality} modality")
+        # RL and evaluation need complete references; generation only uses their prompt prefixes.
         text_preparer = Text(llm_tokenizer,
                              self.truncation_length,
                              self.training_stage,
-                             system_prompt_path=self.system_prompt_path)
+                             system_prompt_path=self.system_prompt_path,
+                             truncate=self.is_training and self.training_stage != "rl",
+                             enable_thinking=self.enable_thinking)
         ecg_modality_preparer = self.build_ecg_modality()
         torch_dataset = ELMDataset(data, ecg_modality_preparer, text_preparer,
                              augmentation = self.augmentation,

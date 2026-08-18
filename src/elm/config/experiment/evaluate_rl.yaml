@@ -1,0 +1,8 @@
+defaults:
+  - ./rl.yaml
+
+model:
+  checkpoint: src/runs/rl/0/checkpoints/epoch_best
+
+evaluation:
+  max_new_tokens: 1024

@@ -1,6 +1,8 @@
 defaults:
   - ../common.yaml
 
+enable_thinking: true
+
 training:
   training_stage: rl
   batch_size: 1

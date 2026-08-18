@@ -4,6 +4,7 @@ from elm.utils.constants import (
     LEADING_PREFIX_RE,
     ROLES,
     TAG_RE,
+    THINK_START,
 )
 
 
@@ -30,10 +31,12 @@ def normalize_text(text: list[dict], system_prompt: str = None) -> list[dict[str
 
 class Text:
     def __init__(self, llm_tokenizer, truncation_length, training_stage,
-                 system_prompt_path=None):
+                 system_prompt_path=None, truncate=True, enable_thinking=False):
         self.llm_tokenizer = llm_tokenizer
         self.truncation_length = truncation_length
         self.training_stage = training_stage
+        self.truncate = truncate
+        self.enable_thinking = enable_thinking
         self.system_prompt = None
         if system_prompt_path:
             with open(system_prompt_path, encoding="utf-8") as file:
@@ -51,7 +54,9 @@ class Text:
         # the document separator, so it is part of the sequence and its loss.
         input_ids = self.llm_tokenizer.encode(
             f"{ecg_token_placeholders}{text}", add_special_tokens=False,
-        )[:self.truncation_length - 1]
+        )
+        if self.truncate:
+            input_ids = input_ids[:self.truncation_length - 1]
         input_ids.append(self.llm_tokenizer.pad_token_id)
         ecg_token = self.llm_tokenizer.convert_tokens_to_ids(ECG_TOKEN_PLACEHOLDER)
         return {
@@ -61,17 +66,14 @@ class Text:
         }
 
     def prepare_sft(self, text, ecg_token_placeholders):
-        # Qwen3/3.5 always includes think start and end tokens
-        # Even when no thinking content present (content inside think start and end is empty)
-        # For our text that already has thinking and answer tags, apply_chat_template
-        # automatically allocates the thinking content appropriately.
+        # The tokenizer's chat template owns all thinking-tag serialization.
         normalized_text = normalize_text(text, self.system_prompt)
         user = next((turn for turn in normalized_text if turn["role"] == "user"), None)
         user["content"] = ecg_token_placeholders + user["content"]
         tokenized_text = self.llm_tokenizer.apply_chat_template(
             normalized_text,
             tokenize=True,
-            truncation=True,
+            truncation=self.truncate,
             max_length=self.truncation_length,
             return_dict=True,
             add_generation_prompt=False,
@@ -80,11 +82,16 @@ class Text:
         assistant_header = self.llm_tokenizer.encode(
             "<|im_start|>assistant\n", add_special_tokens=False)
         im_end = self.llm_tokenizer.convert_tokens_to_ids("<|im_end|>")
+        think_start = self.llm_tokenizer.convert_tokens_to_ids(THINK_START)
         labels = [-100] * len(input_ids)
         for response_start in (i + len(assistant_header) for i in range(len(input_ids))
                                if input_ids[i:i + len(assistant_header)] == assistant_header):
             response_end = next((i + 1 for i in range(response_start, len(input_ids))
                                  if input_ids[i] == im_end), len(input_ids))
+            if self.enable_thinking and input_ids[response_start:response_start + 1] == [think_start]:
+                response_start += 1
             labels[response_start:response_end] = input_ids[response_start:response_end]
+        if all(label == -100 for label in labels):
+            raise ValueError("No assistant response fits within the tokenized sequence")
         tokenized_text["labels"] = labels
         return tokenized_text
