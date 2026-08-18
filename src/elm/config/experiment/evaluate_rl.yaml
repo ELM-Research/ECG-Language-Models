@@ -10,3 +10,7 @@ gpu:
 evaluation:
   split_names: ["fold{fold}_test"]
   max_new_tokens: 1024
+
+data:
+  data_names: [ELM-Research/rl-ecg-r1]
+  split_names: [fold1_test]

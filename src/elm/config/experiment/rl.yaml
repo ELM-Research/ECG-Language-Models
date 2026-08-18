@@ -21,7 +21,7 @@ model:
 
 data:
   data_names: [ELM-Research/rl-ecg-r1]
-  split_names: [fold1_test]
+  split_names: [fold1_train]
 
 rl:
   group_size: 16
