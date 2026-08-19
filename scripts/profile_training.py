@@ -150,15 +150,14 @@ def main() -> None:
     config["development"] = True
     config["wandb"] = False
 
-    strategy = config["gpu"]["strategy"]
     configure_runtime(config)
-    init_dist(strategy)
+    init_dist(config["gpu"]["strategy"])
     try:
         print_training_setup(config)
         set_seed(config["seed"])
         tokenizer, dataloader = build_data(config)
         dataloader = LimitedLoader(dataloader, args.steps)
-        model = setup_model(build_model(config, tokenizer), strategy)
+        model = setup_model(build_model(config, tokenizer), config["gpu"])
         optimizer = build_optimizer(config, model)
         scheduler = build_scheduler(config, optimizer, dataloader)
         checkpointer = Checkpointer(model, tokenizer, optimizer, scheduler, None, 1, enabled=False)

@@ -5,13 +5,13 @@ training:
   training_stage: pretrain
   batch_size: 12
   gradient_accumulation_steps: 1
-  epochs: 3
+  epochs: 1
 
 optimizer:
   learning_rate: 2.0e-4
 
 model:
-  checkpoint: src/runs/pretrain_stage1/0/checkpoints/epoch_best
+  checkpoint: null # src/runs/pretrain_stage1/0/checkpoints/epoch_best
   trainable: [projector, language_model]
 
 data:
