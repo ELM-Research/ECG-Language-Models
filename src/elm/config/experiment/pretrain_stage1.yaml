@@ -5,7 +5,7 @@ training:
   training_stage: pretrain
   batch_size: 12
   gradient_accumulation_steps: 1
-  epochs: 10
+  epochs: 6
 
 optimizer:
   learning_rate: 5.0e-4

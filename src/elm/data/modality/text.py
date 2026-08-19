@@ -48,7 +48,7 @@ class Text:
         self.system_prompt = None
         if system_prompt_path:
             with open(system_prompt_path, encoding="utf-8") as file:
-                self.system_prompt = file.read()
+                self.system_prompt = file.read().strip()
 
     def __call__(self, text, ecg_token_placeholders):
         if self.training_stage is None:

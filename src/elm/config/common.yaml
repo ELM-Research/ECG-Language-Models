@@ -57,6 +57,8 @@ evaluation:
   do_sample: false
   output_dir: src/elm/results
 
+system_prompt_path: src/elm/config/system_prompts/think.txt
+
 model:
   name: orah
   checkpoint: null

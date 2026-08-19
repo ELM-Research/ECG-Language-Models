@@ -2,7 +2,6 @@ defaults:
   - ../common.yaml
 
 explicit_thinking: true
-system_prompt_path: src/elm/config/system_prompts/think.txt
 
 training:
   training_stage: rl

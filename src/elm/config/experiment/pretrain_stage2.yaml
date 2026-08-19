@@ -11,7 +11,7 @@ optimizer:
   learning_rate: 2.0e-4
 
 model:
-  checkpoint: null
+  checkpoint: src/runs/pretrain_stage1/0/checkpoints/epoch_best
   trainable: [projector, language_model]
 
 data:
