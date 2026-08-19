@@ -148,8 +148,8 @@ def evaluate(model, dataset, tokenizer, config: dict) -> dict:
                 hypothesis = generate_response(
                     model, input_ids, ecg_values, tokenizer, config["evaluation"])
                 records.append({
-                    "prompt": prompt, "reference": reference,
-                    "hypothesis": hypothesis,
+                    "prompt": prompt, "predicted": hypothesis,
+                    "ground_truth": reference,
                 })
                 if config["development"]:
                     print_generation(
@@ -170,8 +170,8 @@ def evaluate(model, dataset, tokenizer, config: dict) -> dict:
                         model, input_ids, ecg_values, tokenizer, config["evaluation"])
                     records.append({
                         "prompt": prompt,
-                        "reference": reference,
-                        "hypothesis": hypothesis,
+                        "ground_truth": reference,
+                        "predicted": hypothesis,
                     })
                     if config["development"]:
                         print_generation(
@@ -182,8 +182,8 @@ def evaluate(model, dataset, tokenizer, config: dict) -> dict:
             if config["development"] and example_index == 0:
                 break
 
-    references = [record["reference"] for record in records]
-    hypotheses = [record["hypothesis"] for record in records]
+    references = [record["ground_truth"] for record in records]
+    hypotheses = [record["predicted"] for record in records]
     reference_parts = [split_response(text) for text in references]
     hypothesis_parts = [split_response(text, explicit_thinking) for text in hypotheses]
     answer_references = [parts[1] for parts in reference_parts]

@@ -1,7 +1,7 @@
 defaults:
   - ../common.yaml
 
-explicit_thinking: true
+explicit_thinking: false
 
 training:
   training_stage: rl

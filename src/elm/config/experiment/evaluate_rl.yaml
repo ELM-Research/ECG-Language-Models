@@ -1,6 +1,9 @@
 defaults:
   - ./rl.yaml
 
+development: true
+wandb: false
+
 model:
   checkpoint: null
 

@@ -53,7 +53,7 @@ explicit_thinking: false
 evaluation:
   folds: [1]
   seeds: [0]
-  max_new_tokens: 512
+  max_new_tokens: 1024
   do_sample: false
   output_dir: src/elm/results
 
