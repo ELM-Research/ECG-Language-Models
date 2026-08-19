@@ -1,72 +1,41 @@
-import torch
-import gc
 
-from dataloaders.build_dataloader import BuildDataLoader
-from dataloaders.data_representation.base import Base
+import numpy as np
 
-from utils.dir_file_manager import DirFileManager
+from elm.config.load import get_config
+from elm.data.build import DataBuilder
+from elm.data.modality.signal import Signal
+from elm.data.modality.text import Text, chat_prompt
+from elm.evaluation.evaluator import generate_response
+from elm.model import build_model
+from elm.utils.constants import THINK_START
+from elm.utils.parallelism import setup_model
+from elm.utils.seed import set_seed
 
-from elms.build_elm import BuildELM
 
-from utils.gpu_manager import GPUSetup
+def main() -> None:
+    config, _ = get_config()
+    set_seed(config["seed"])
+    explicit_thinking = config["explicit_thinking"]
+    tokenizer = DataBuilder(config, training=False).build_llm_tokenizer()
+    model = setup_model(build_model(config, tokenizer), None).eval()
+    text_preparer = Text(tokenizer, config["model"]["truncation_length"], None,
+                         system_prompt_path=config["system_prompt_path"])
 
-from configs.config import get_args
+    opened_npy = np.load(input("ECG path: ").strip(), allow_pickle=True).item()
+    ecg = opened_npy["ecg"]
+    print("Report", opened_npy["report"])
+    ecg_input, placeholders = Signal(config["model"]["num_ecg_tokens"])(ecg)
 
-def main():
-    mode = "inference"
-    args = get_args(mode)
-    args.mode = mode
-
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    build_tokenizer = BuildDataLoader(args)
-    llm_tokenizer = build_tokenizer.dataset_mixer.build_llm_tokenizer()
-
-    build_elm = BuildELM(args)
-    elm_components = build_elm.build_elm(llm_tokenizer["llm_tokenizer"])
-
-    gpu_setup = GPUSetup(args)
-    elm = gpu_setup.setup_gpu(elm_components["elm"], False)
-    device = next(elm.parameters()).device
-
-    chat = Base(None, args)
-    chat.llm_tokenizer = llm_tokenizer["llm_tokenizer"]
-
-    print("Input an ECG path")
-    ecg_path = input()
-    ecg_file = DirFileManager.open_npy(ecg_path)
-    ecg = ecg_file["ecg"]
-    normalized_ecg, _ = chat.normalize(ecg)
-    ecg_tensor = torch.unsqueeze(torch.tensor(normalized_ecg), dim=0).to(device)
-
-    formatted_input = []
-
-    elm.eval()
+    history = []
     while True:
-        user_input = input("User: ")
-        formatted_input.append({"role": "user", "content": user_input})
-        formatted_input.append({"role": "assistant", "content": ""})
-        formatted_prompt = chat.make_prompt(formatted_input)
-        tokenized_prompt = chat.prepare_input_ids(formatted_prompt)
-        elm_input_ids = torch.unsqueeze(torch.tensor(tokenized_prompt), dim=0).to(device)
-
-        encoder_tokenizer_out = {"ecg_signal": ecg_tensor.to(device)}
-
-        elm_attention_mask = torch.ones(elm_input_ids.shape).to(device)
-
-        signal_id_indices = torch.unsqueeze(torch.tensor(chat.find_signal_token_indices(tokenized_prompt)), dim=0).to(device)
-
-        generate_output = elm.generate(elm_input_ids,
-         encoder_tokenizer_out,
-         elm_attention_mask,
-         signal_id_indices,
-         args.max_new_tokens)
-
-        response = chat.decode_response(generate_output[0].tolist())
-        print(response)
-
-        formatted_input[-1] = {"role": "assistant", "content": response}
-
+        message = input("\nUser: ").strip()
+        if message == "break": break
+        history.append({"role": "user", "content": message})
+        prompt = chat_prompt(tokenizer, text_preparer(history, placeholders)["messages"], explicit_thinking)
+        response = generate_response(model, tokenizer.encode(prompt, add_special_tokens=False),
+                                     ecg_input["ecg_values"], tokenizer, config["evaluation"])
+        print(f"Assistant: {response}")
+        history.append({"role": "assistant",
+                        "content": f"{THINK_START}\n{response}" if explicit_thinking else response})
 if __name__ == "__main__":
     main()

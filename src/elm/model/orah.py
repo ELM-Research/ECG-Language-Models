@@ -76,7 +76,11 @@ class Orah(PreTrainedModel, GenerationMixin):
         self.post_init()
         if config.lora:
             self.language_model = get_peft_model(self.language_model, LoraConfig(**config.lora))
+            self.refresh_tied_weight_keys()
         self.set_trainable(config.trainable)
+
+    def refresh_tied_weight_keys(self):
+        self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=True)
 
     def get_input_embeddings(self): return self.language_model.get_input_embeddings()
 
@@ -160,6 +164,7 @@ class Orah(PreTrainedModel, GenerationMixin):
             self.language_model = self.language_model.merge_and_unload(safe_merge=True)
         else:
             self.language_model = get_peft_model(self.language_model, LoraConfig(**lora))
+        self.refresh_tied_weight_keys()
         self.config.lora = dict(lora) if lora else None
 
     def train(self, mode=True):
