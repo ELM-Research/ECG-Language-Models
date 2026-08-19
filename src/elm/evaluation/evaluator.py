@@ -198,7 +198,6 @@ def evaluate(model, dataset, tokenizer, config: dict) -> dict:
 
     result = {
         "num_pairs": len(records), "metrics": metrics, "predictions": records,
-        "answer_references": answer_references, "answer_hypotheses": answer_hypotheses,
     }
     print_metrics(result)
     return result
@@ -233,9 +232,7 @@ def print_metrics(result: dict) -> None:
 
 
 def save_run(result: dict, output_dir: Path, fold, seed) -> Path:
-    stem = f"fold_{fold}_seed_{seed}"
-    path = output_dir / f"{stem}.json"
-    payload = {"fold": fold, "seed": seed, **result}
+    path = output_dir / f"fold_{fold}_seed_{seed}.json"
     with path.open("w") as file:
-        json.dump(payload, file, indent=2)
+        json.dump(result["predictions"], file, indent=2)
     return path
