@@ -12,7 +12,6 @@ optimizer:
 
 model:
   trainable: [projector]
-  peft: false
   vision_model: /p01/whan/ecg_encoder/src/runs/pretrain/siglip2-base-patch16-naflex/2/hf_converted
 
 data:
