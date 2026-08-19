@@ -3,7 +3,6 @@ from elm.utils.constants import (
     LEADING_PREFIX_RE,
     ROLES,
     TAG_RE,
-    THINK_START,
 )
 
 
@@ -31,7 +30,7 @@ def chat_prompt(tokenizer, messages: list[dict], explicit_thinking: bool) -> str
         add_generation_prompt=True,
         enable_thinking=True,
     )
-    think_prompt = f"{THINK_START}\n"
+    think_prompt = "<think>\n"
     if not explicit_thinking:
         prompt = prompt[:-len(think_prompt)]
     return prompt

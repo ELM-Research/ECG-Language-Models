@@ -7,7 +7,6 @@ from elm.data.modality.signal import Signal
 from elm.data.modality.text import Text, chat_prompt
 from elm.evaluation.evaluator import generate_response
 from elm.model import build_model
-from elm.utils.constants import THINK_START
 from elm.utils.parallelism import setup_model
 from elm.utils.seed import set_seed
 
@@ -36,6 +35,6 @@ def main() -> None:
                                      ecg_input["ecg_values"], tokenizer, config["evaluation"])
         print(f"Assistant: {response}")
         history.append({"role": "assistant",
-                        "content": f"{THINK_START}\n{response}" if explicit_thinking else response})
+                        "content": f"<think>\n{response}" if explicit_thinking else response})
 if __name__ == "__main__":
     main()

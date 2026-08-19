@@ -124,8 +124,7 @@ class DataBuilder:
         if self.development and is_main():
             print("Before Modification\n")
             self.print_llm_tokenizer_info(llm_tokenizer)
-        tokens_to_add = [ECG_TOKEN_PLACEHOLDER]
-        llm_tokenizer.add_tokens(tokens_to_add)
+        llm_tokenizer.add_tokens([ECG_TOKEN_PLACEHOLDER])
         if self.development and is_main():
             print("After Modification\n")
             self.print_llm_tokenizer_info(llm_tokenizer)
