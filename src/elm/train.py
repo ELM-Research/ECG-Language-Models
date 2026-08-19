@@ -23,9 +23,8 @@ def main():
     resume = config["training"].get("resume")
     if resume:
         config["model"]["checkpoint"] = resume
-    strategy = config["gpu"]["strategy"]
     configure_runtime(config)
-    init_dist(strategy)
+    init_dist(config["gpu"]["strategy"])
     print_training_setup(config)
 
     try:
@@ -38,7 +37,7 @@ def main():
 
         set_seed(config["seed"])
         tokenizer, dataloader = build_data(config)
-        model = setup_model(build_model(config, tokenizer), strategy)
+        model = setup_model(build_model(config, tokenizer), config["gpu"])
         optimizer = build_optimizer(config, model)
         scheduler = build_scheduler(config, optimizer, dataloader)
         checkpointer = Checkpointer(model, tokenizer, optimizer, scheduler, run_dir,

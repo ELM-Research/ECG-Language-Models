@@ -100,6 +100,7 @@ def rollout_group(
                 temperature=config["temperature"],
                 eos_token_id=sorted(eos_ids),
                 pad_token_id=pad_id,
+                use_cache = True,
             )
 
         includes_prompt = gen.shape[1] >= pL and torch.equal(gen[0, :pL], prompt_ids)

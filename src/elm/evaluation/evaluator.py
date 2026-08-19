@@ -3,8 +3,6 @@ import string
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
-
-import matplotlib
 import numpy as np
 import scipy.stats as stats
 import torch
@@ -12,15 +10,9 @@ from nltk.translate.bleu_score import SmoothingFunction, corpus_bleu
 from nltk.translate.meteor_score import meteor_score
 from rouge_score.rouge_scorer import RougeScorer
 from tqdm import tqdm
-
 from elm.data.modality.text import chat_prompt
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-
 ROUGE_SCORER = RougeScorer(["rougeL"], use_stemmer=True)
-
 
 def split_response(text: str, explicit_thinking: bool = False) -> tuple[str, str]:
     thinking = ""
@@ -103,6 +95,7 @@ def generate_response(model, input_ids: list[int], ecg_values, tokenizer, evalua
         "attention_mask": torch.ones_like(input_ids),
         "max_new_tokens": evaluation["max_new_tokens"],
         "do_sample": evaluation["do_sample"],
+        "use_cache": True
     }
     if ecg_values is not None:
         generation["ecg_values"] = torch.as_tensor(ecg_values, device=device).unsqueeze(0)

@@ -6,6 +6,7 @@ gpu:
   strategy: fsdp2 # null for one device, fsdp2 for multiple devices
   matmul_precision: high
   cudnn_benchmark: true
+  gradient_checkpointing: null
 
 training:
   max_grad_norm: 1.0
@@ -44,9 +45,6 @@ augment_ecg: false
 
 # Perturbation
 perturbation: null
-
-# Modality
-modality: signal
 
 explicit_thinking: false
 

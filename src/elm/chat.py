@@ -17,7 +17,7 @@ def main() -> None:
     set_seed(config["seed"])
     explicit_thinking = config["explicit_thinking"]
     tokenizer = DataBuilder(config, training=False).build_llm_tokenizer()
-    model = setup_model(build_model(config, tokenizer), None).eval()
+    model = setup_model(build_model(config, tokenizer), config["gpu"]).eval()
     text_preparer = Text(tokenizer, config["model"]["truncation_length"], None,
                          system_prompt_path=config["system_prompt_path"])
 

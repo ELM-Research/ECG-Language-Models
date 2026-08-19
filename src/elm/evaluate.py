@@ -39,7 +39,7 @@ def main() -> None:
         output_dirs.add(run_dir)
         set_seed(seeds[0])
         tokenizer, dataset = build_data(current, training=False)
-        model = setup_model(build_model(current, tokenizer), None)
+        model = setup_model(build_model(current, tokenizer), config["gpu"])
 
         for seed in seeds:
             print(f"Evaluating fold {fold} with seed {seed}")

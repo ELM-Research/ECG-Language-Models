@@ -7,6 +7,8 @@ from datasets import load_dataset
 from elm.utils.parallelism import get_rank, get_world_size, is_main
 from elm.utils.constants import ECG_TOKEN_PLACEHOLDER, RL_TOKENS, ROLES
 from elm.data.modality.signal import Signal
+from elm.data.modality.elm_dataset import ELMDataset
+from elm.data.modality.text import Text
 
 class DataBuilder:
     def __init__(self, config: dict, training: bool = True):
@@ -58,8 +60,6 @@ class DataBuilder:
 
     ### TORCH DATASET
     def build_torch_dataset(self, llm_tokenizer):
-        from elm.data.modality.elm_dataset import ELMDataset
-        from elm.data.modality.text import Text
         data = []
         for data_name, split_name in zip(self.data_names, self.split_names):
             dataset = self.build_hf_dataset(data_name, split_name)

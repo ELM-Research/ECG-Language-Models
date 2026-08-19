@@ -99,8 +99,10 @@ def set_gradient_sync(model: torch.nn.Module, enabled: bool) -> None:
         model.set_requires_gradient_sync(enabled)
 
 
-def setup_model(model: torch.nn.Module, strategy: str | None) -> torch.nn.Module:
-    if strategy is None:
+def setup_model(model: torch.nn.Module, gpu_config: str | None) -> torch.nn.Module:
+    if gpu_config["gradient_checkpointing"]:
+        model.gradient_checkpointing_enable({"use_reentrant": False})
+    if gpu_config["strategy"] is None:
         return model.to(get_device())
 
     # uniform FP32 originals satisfy FSDP2 and remain the optimizer's sharded master weights.
