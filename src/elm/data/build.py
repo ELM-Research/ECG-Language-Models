@@ -5,7 +5,7 @@ from torch.utils.data.distributed import DistributedSampler
 from transformers import AutoTokenizer, DataCollatorForSeq2Seq
 from datasets import load_dataset
 from elm.utils.parallelism import get_rank, get_world_size, is_main
-from elm.utils.constants import ECG_TOKEN_PLACEHOLDER, RL_TOKENS, ROLES
+from elm.utils.constants import ECG_TOKEN_PLACEHOLDER, ROLES
 from elm.data.modality.signal import Signal
 from elm.data.modality.elm_dataset import ELMDataset
 from elm.data.modality.text import Text
@@ -124,13 +124,7 @@ class DataBuilder:
         if self.development and is_main():
             print("Before Modification\n")
             self.print_llm_tokenizer_info(llm_tokenizer)
-
         tokens_to_add = [ECG_TOKEN_PLACEHOLDER]
-        if self.training_stage in ["sft", "rl"]:
-            vocab = llm_tokenizer.get_vocab()
-            for token in RL_TOKENS:
-                if token not in vocab: tokens_to_add.append(token)
-
         llm_tokenizer.add_tokens(tokens_to_add)
         if self.development and is_main():
             print("After Modification\n")
