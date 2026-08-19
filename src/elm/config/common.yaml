@@ -1,6 +1,6 @@
 seed: 0
 development: false
-wandb: true
+wandb: false
 
 gpu:
   strategy: fsdp2 # null for one device, fsdp2 for multiple devices

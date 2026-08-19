@@ -117,6 +117,7 @@ class Orah(PreTrainedModel, GenerationMixin):
                 inputs_embeds=None, **kwargs):
         input_ids, attention_mask, inputs_embeds = self.prepare_inputs(
             input_ids, attention_mask, ecg_values, inputs_embeds)
+        print(inputs_embeds.shape)
         return self.language_model(
             input_ids=None if inputs_embeds is not None else input_ids,
             inputs_embeds=inputs_embeds,
