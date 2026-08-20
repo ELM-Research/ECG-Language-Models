@@ -21,7 +21,8 @@ def trim_mask(new_tokens: torch.Tensor, eos_ids: set, pad_id: int | None = None)
 
 def _decode_for_reward(tokenizer, ids: torch.Tensor, strip_ids: set) -> str:
     kept = [int(t) for t in ids.tolist() if int(t) not in strip_ids]
-    return tokenizer.decode(kept, skip_special_tokens=False).strip()
+    return tokenizer.decode(kept, skip_special_tokens=False,
+                            clean_up_tokenization_spaces=False).strip()
 
 
 def final_response_range(labels: torch.Tensor) -> tuple[int, int]:

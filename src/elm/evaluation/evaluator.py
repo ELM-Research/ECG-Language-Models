@@ -111,7 +111,8 @@ def generate_response(model, input_ids: list[int], ecg_values, tokenizer, evalua
     if output.shape[0] >= prompt_length and torch.equal(output[:prompt_length], input_ids[0]):
         output = output[prompt_length:]
     stop = next((index for index, token in enumerate(output.tolist()) if token in stop_ids), len(output))
-    return tokenizer.decode(output[:stop], skip_special_tokens=True).strip()
+    return tokenizer.decode(output[:stop], skip_special_tokens=True,
+                            clean_up_tokenization_spaces=False).strip()
 
 
 def print_generation(example: int, turn: int, prompt: str, reference: str,
