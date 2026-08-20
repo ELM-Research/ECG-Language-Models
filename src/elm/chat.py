@@ -31,7 +31,7 @@ def main() -> None:
         if message == "break": break
         history.append({"role": "user", "content": message})
         prompt = chat_prompt(tokenizer, text_preparer(history, placeholders)["messages"], explicit_thinking)
-        response = generate_response(model, tokenizer.encode(prompt, add_special_tokens=False),
+        response = generate_response(model, tokenizer.encode("<ecg>" * 100, add_special_tokens=False),
                                      ecg_input["ecg_values"], tokenizer, config["evaluation"])
         print(f"Assistant: {response}")
         history.append({"role": "assistant",
