@@ -99,11 +99,13 @@ class Text:
             conversation[len(prompt):], add_special_tokens=False)
         im_end = self.llm_tokenizer.convert_tokens_to_ids("<|im_end|>")
         response_ids = response_ids[:response_ids.index(im_end) + 1]
+        if self.truncate and len(prompt_ids) + len(response_ids) > self.truncation_length:
+            available = self.truncation_length - len(prompt_ids)
+            if available < 1:
+                raise ValueError("The SFT prompt exceeds the truncation length")
+            response_ids = response_ids[:available - 1] + [im_end]
         input_ids = prompt_ids + response_ids
         labels = [-100] * len(prompt_ids) + response_ids
-        if self.truncate:
-            input_ids = input_ids[:self.truncation_length]
-            labels = labels[:self.truncation_length]
         return {
             "input_ids": input_ids,
             "attention_mask": [1] * len(input_ids),
