@@ -1,0 +1,17 @@
+defaults:
+  - ./rl.yaml
+
+development: false
+wandb: false
+
+gpu:
+  strategy: null
+  gradient_checkpointing: false
+
+model:
+  checkpoint: src/runs/rl/0/checkpoints/epoch_best
+  trainable: []
+
+evaluation:
+  max_new_tokens: 1024
+  do_sample: false
