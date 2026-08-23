@@ -13,6 +13,7 @@ optimizer:
 model:
   checkpoint: src/runs/pretrain_stage2/0/checkpoints/epoch_best
   trainable: [projector, language_model]
+  truncation_length: 2048
 
 data:
   data_names: [ELM-Research/sft-stage1-noaug-filtered]
