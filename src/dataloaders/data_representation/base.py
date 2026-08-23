@@ -1,325 +1,192 @@
-from torch.utils.data import Dataset
-import random
-import numpy as np
-from typing import List, Tuple
-from PIL import Image
-import torch
+#!/usr/bin/env python3
+"""Measure Orah forward and backward CUDA memory for a dummy token length."""
 
-from utils.dir_file_manager import DirFileManager
-from utils.chat_template_manager import get_conv_template
-from utils.gpu_manager import is_main
-from configs.constants import (
-    HF_LLMS,
-    SIGNAL_TOKEN_PLACEHOLDER,
-    LEADING_PREFIX_RE,
-    TAG_RE,
-    IMAGE_WORD_RE,
-    case_preserving_signal,
-    ECG_ENCODERS,
-    VISION_ENCODERS,
+import argparse
+from pathlib import Path
+
+import torch
+from torch import distributed
+from torch.nn.functional import pad
+
+from elm.config.load import load_config
+from elm.data.build import DataBuilder
+from elm.model import build_model
+from elm.utils.parallelism import (
+    cleanup,
+    configure_runtime,
+    get_device,
+    get_world_size,
+    init_dist,
+    is_main,
+    setup_model,
 )
 
-class Base(Dataset):
-    def __init__(self, data, args):
-        self.data = data
-        self.args = args
-        self.fm = DirFileManager()
-        if self.args.llm:
-            self.chat_template = self.make_chat_template()
-        if self.args.encoder:
-            if self.args.encoder in ECG_ENCODERS:
-                self.max_len = ECG_ENCODERS[self.args.encoder]["encoder_input_len"]
-            elif self.args.encoder in VISION_ENCODERS:
-                self.max_len = VISION_ENCODERS[self.args.encoder]["encoder_input_len"]
 
-    def __len__(self):
-        return len(self.data)
+GIB = 1024**3
+DEFAULT_CONFIG = Path("src/elm/config/experiment/sft_stage1.yaml")
 
-    ### ENCODER TRAINING FUNCTIONS ###
-    def prepare_clip_input(self, diagnostic_report: str, ecg_image: Image.Image):
-        clip_out = self.encoder_tokenizer(
-            text=[diagnostic_report], images=[ecg_image], return_tensors="pt", padding="max_length", max_length=self.max_len, truncation=True
+
+def positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("value must be positive")
+    return parsed
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("length", type=positive_int, help="Total number of tokens in each dummy sequence.")
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument(
+        "--batch-size",
+        type=positive_int,
+        help="Dummy microbatch size; defaults to training.batch_size in the config.",
+    )
+    parser.add_argument(
+        "--single-device",
+        action="store_true",
+        help="Ignore the config's distributed strategy and profile one unsharded model.",
+    )
+    return parser.parse_args()
+
+
+def gib(value: int) -> str:
+    return f"{value / GIB:.2f} GiB"
+
+
+def print_memory(name: str, current: int, peak: int, peak_reserved: int, baseline: int) -> None:
+    print(
+        f"{name:<16} allocated={gib(current):>10}  "
+        f"peak allocated={gib(peak):>10}  peak reserved={gib(peak_reserved):>10}  "
+        f"peak over baseline={gib(peak - baseline):>10}"
+    )
+
+
+def maximum_across_ranks(values: tuple[int, ...], device: torch.device) -> list[int]:
+    stats = torch.tensor(values, dtype=torch.int64, device=device)
+    if distributed.is_initialized():
+        distributed.all_reduce(stats, op=distributed.ReduceOp.MAX)
+    return stats.tolist()
+
+
+def profile(args: argparse.Namespace, config: dict) -> None:
+    device = get_device()
+    if device.type != "cuda":
+        raise RuntimeError("This profiler requires a CUDA device")
+
+    tokenizer = DataBuilder(config).build_llm_tokenizer()
+    model = setup_model(build_model(config, tokenizer), config["gpu"])
+    model.train()
+
+    num_ecg_tokens = model.config.num_ecg_tokens
+    if args.length <= num_ecg_tokens:
+        raise ValueError(
+            f"length must be greater than num_ecg_tokens ({num_ecg_tokens}) "
+            "so the dummy batch has a supervised text token"
         )
-        return {
-            "encoder_input_ids": clip_out["input_ids"][0].contiguous(),
-            "encoder_attention_mask": clip_out["attention_mask"][0].contiguous(),
-            "encoder_pixels": clip_out["pixel_values"][0].contiguous(),
-        }
 
-    def prepare_siglip_input(self, diagnostic_report: str, ecg_image: Image.Image):
-        siglip_out = self.encoder_tokenizer(
-            text=[diagnostic_report], images=[ecg_image], return_tensors="pt", padding="max_length", max_length=self.max_len, truncation=True
-        )
-        return {
-            "encoder_input_ids": siglip_out["input_ids"][0].contiguous(),
-            "encoder_attention_mask": siglip_out["pixel_attention_mask"][0].contiguous(),
-            "encoder_pixels": siglip_out["pixel_values"][0].contiguous(),
-            "spatial_shapes": siglip_out["spatial_shapes"][0].contiguous(),
-        }
+    batch_size = config["training"]["batch_size"]
+    ecg_token_id = model.config.ecg_token_id
+    text_token_id = 0 if ecg_token_id != 0 else 1
+    input_ids = torch.full((batch_size, args.length), text_token_id, dtype=torch.long, device=device)
+    input_ids[:, :num_ecg_tokens] = ecg_token_id
+    attention_mask = torch.ones_like(input_ids)
+    labels = input_ids.clone()
+    labels[:, :num_ecg_tokens] = -100
+    ecg_values = torch.zeros(
+        (batch_size, model.config.num_leads, model.config.segment_length),
+        device=device,
+    )
 
-    def prepare_vit_input(self, ecg_image: Image.Image):
-        vit_out = self.encoder_tokenizer(images=ecg_image, return_tensors="pt")
-        mask = torch.rand(size=(1, VISION_ENCODERS[self.args.encoder]["num_patches"])) < 0.75
-        return {
-            "encoder_pixels": vit_out["pixel_values"][0].contiguous(),
-            "encoder_mask": mask[0].contiguous(),
-        }
+    # Match the loss construction in elm.training.supervised: only retain logits
+    # needed for the supervised text suffix.
+    label_start = num_ecg_tokens
+    logits_to_keep = args.length - label_start + 1
+    shift_labels = pad(labels[:, label_start:], (0, 1), value=-100)
 
-    ### ELM TRAINING/EVAL/INFERENCE FUNCTIONS ###
-    @staticmethod
-    def id_set(watch_token_entry) -> set:
-        """Token IDs from a watch_tokens entry, which may be an {id: str} dict or a plain id iterable."""
-        return set(watch_token_entry.keys() if isinstance(watch_token_entry, dict) else watch_token_entry)
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize(device)
+    baseline = torch.cuda.memory_allocated(device)
+    baseline_reserved = torch.cuda.memory_reserved(device)
 
-    def slice_continuation(self, prompt_ids: list[int], generated_ids: list[int]) -> list[int]:
-        K = len(prompt_ids)
-        if len(generated_ids) >= K and generated_ids[:K] == prompt_ids:
-            return generated_ids[K:]
-        return generated_ids
+    torch.cuda.reset_peak_memory_stats(device)
+    loss = model(
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        labels=labels,
+        ecg_values=ecg_values,
+        logits_to_keep=logits_to_keep,
+        shift_labels=shift_labels,
+        use_cache=False,
+    ).loss
+    torch.cuda.synchronize(device)
+    forward_current = torch.cuda.memory_allocated(device)
+    forward_peak = torch.cuda.max_memory_allocated(device)
+    forward_peak_reserved = torch.cuda.max_memory_reserved(device)
 
-    def get_response_ranges(self, input_ids: List[int]) -> List[Tuple[int, int]]:
-        labels = self.create_labels(input_ids)
-        ranges, start = [], None
-        for i, lab in enumerate(labels):
-            if lab != -100 and start is None:
-                start = i
-            if lab == -100 and start is not None:
-                ranges.append((start, i))
-                start = None
-        if start is not None:
-            ranges.append((start, len(labels)))
-        return ranges
+    torch.cuda.reset_peak_memory_stats(device)
+    loss.backward()
+    torch.cuda.synchronize(device)
+    backward_current = torch.cuda.memory_allocated(device)
+    backward_peak = torch.cuda.max_memory_allocated(device)
+    backward_peak_reserved = torch.cuda.max_memory_reserved(device)
 
-    def get_ground_truth_responses(self, input_ids: List[int], ranges: List[Tuple[int, int]]) -> List[str]:
-        return [self.decode_response(input_ids[s:e]) for s, e in ranges]
+    stats = maximum_across_ranks(
+        (
+            baseline,
+            baseline_reserved,
+            forward_current,
+            forward_peak,
+            forward_peak_reserved,
+            backward_current,
+            backward_peak,
+            backward_peak_reserved,
+        ),
+        device,
+    )
+    if not is_main():
+        return
+    (
+        baseline,
+        baseline_reserved,
+        forward_current,
+        forward_peak,
+        forward_peak_reserved,
+        backward_current,
+        backward_peak,
+        backward_peak_reserved,
+    ) = stats
+    parameter = next(model.parameters())
+    print(f"device: {torch.cuda.get_device_name(device)}")
+    print(f"config: {args.config}")
+    print(f"strategy: {config['gpu']['strategy'] or 'single device'} ({get_world_size()} rank(s))")
+    print(f"tokens: {args.length:,}")
+    print(f"batch size per rank: {batch_size}")
+    print(f"parameter dtype: {parameter.dtype}")
+    print(f"gradient checkpointing: {config['gpu']['gradient_checkpointing']}")
+    print_memory("model + inputs", baseline, baseline, baseline_reserved, baseline)
+    print_memory("after forward", forward_current, forward_peak, forward_peak_reserved, baseline)
+    print_memory("after backward", backward_current, backward_peak, backward_peak_reserved, baseline)
+    print(f"loss: {loss.detach().item():.6f}")
+    print(f"overall peak allocated: {gib(max(forward_peak, backward_peak))}")
+    print(f"overall peak reserved: {gib(max(forward_peak_reserved, backward_peak_reserved))}")
 
-    def decode_response(self, ids: list[int]) -> str:
-        wt = HF_LLMS[self.args.llm]["watch_tokens"]
-        drop = self.id_set(wt["eos_token"]) | self.id_set(wt.get("final_eos_token", ())) | {self.llm_tokenizer.pad_token_id}
-        return self.llm_tokenizer.decode([t for t in ids if t not in drop], skip_special_tokens=False, clean_up_tokenization_spaces=True).strip()
 
-    def get_generated_response_for_turn(self, prompt_input_ids: list[int], generated_ids: list[int]) -> str:
-        wt = HF_LLMS[self.args.llm]["watch_tokens"]
-        stop_ids = self.id_set(wt["eos_token"]) | self.id_set(wt.get("final_eos_token", ()))
-        cont = self.slice_continuation(prompt_input_ids, generated_ids)
-        cut = next((i for i, t in enumerate(cont) if t in stop_ids), len(cont))
-        return self.decode_response(cont[:cut])
+def main() -> None:
+    args = parse_args()
+    config = load_config(args.config)
+    if args.single_device:
+        config["gpu"]["strategy"] = None
+    if args.batch_size is not None:
+        config["training"]["batch_size"] = args.batch_size
 
-    @property
-    def think_prefix_ids(self) -> list[int]:
-        if not hasattr(self, "_think_prefix_ids"):
-            self._think_prefix_ids = self.llm_tokenizer.encode("<think>\n", add_special_tokens=False)
-        return self._think_prefix_ids
+    configure_runtime(config)
+    init_dist(config["gpu"]["strategy"])
+    try:
+        profile(args, config)
+    finally:
+        cleanup()
 
-    def create_labels(self, input_ids: list[int]) -> list[int]:
-        if getattr(self.args, "train_phase", "sft") == "pretrain":
-            sig = self.llm_tokenizer.convert_tokens_to_ids(SIGNAL_TOKEN_PLACEHOLDER)
-            bos = next(iter(HF_LLMS[self.args.llm]["watch_tokens"]["bos_token"]))
-            last_sig = max((i for i, t in enumerate(input_ids) if t == sig), default=-1)
-            prefix_end = last_sig + 2 if last_sig >= 0 else (input_ids.index(bos) + 1 if bos in input_ids else 0)
-            return [-100 if i < prefix_end else t for i, t in enumerate(input_ids)]
-        wt = HF_LLMS[self.args.llm]["watch_tokens"]
-        BOS = self.id_set(wt["bos_token"])
-        EOS = self.id_set(wt["eos_token"])
-        FINAL_EOS = self.id_set(wt.get("final_eos_token", ()))
-        labels = [-100] * len(input_ids)
-        i, L = 0, len(input_ids)
-        seen_bos = False
-        in_resp = False
-        START = wt["response_start"]["order"]
-        k = len(START)
-        TP = self.think_prefix_ids if getattr(self.args, "explicit_thinking", False) else []
-        kt = len(TP)
 
-        while i < L:
-            tok = input_ids[i]
-            if not seen_bos and tok in BOS:
-                seen_bos = True
-            if seen_bos and (not in_resp) and k > 0:
-                if i + k <= L and input_ids[i : i + k] == START:
-                    i += k
-                    in_resp = True
-                    if kt and i + kt <= L and input_ids[i : i + kt] == TP:
-                        i += kt
-                    continue
-            if in_resp:
-                labels[i] = tok
-                if tok in EOS:
-                    in_resp = False
-            i += 1
-        if L and input_ids[-1] in FINAL_EOS:  # ensure a single trailing <eos> is labeled (e.g., Gemma 2's final EOS)
-            labels[-1] = input_ids[-1]
-        return labels
-
-    def create_attention_mask(self, input_ids: list[int]) -> list[int]:
-        bos_token = next(iter(HF_LLMS[self.args.llm]["watch_tokens"]["bos_token"]))
-        start_idx = input_ids.index(bos_token)
-        return [0] * start_idx + [1] * (len(input_ids) - start_idx)
-
-    def prepare_input_ids(self, prompt: str) -> list[int]:
-        tokens = self.llm_tokenizer.encode(prompt, add_special_tokens=False)
-        if "train" in self.args.mode and len(tokens) > self.args.llm_input_len:
-            return self.truncate_input_preserving_signal_tokens(tokens)
-        return tokens
-
-    def make_prompt(
-        self,
-        text: str,
-    ):
-        if getattr(self.args, "train_phase", "sft") == "pretrain":
-            wt = HF_LLMS[self.args.llm]["watch_tokens"]
-            bos = next(iter(wt["bos_token"].values()))
-            eos = next(iter(wt.get("final_eos_token", wt["eos_token"]).values()))
-            sigs = "" if self.args.perturb == "only_text" else SIGNAL_TOKEN_PLACEHOLDER * self.args.num_encoder_tokens + "\n"
-            return f"{bos}{sigs}{text}{eos}"
-        prompt = self.chat_template.copy()
-        turn_count = 0
-        signal_token_placeholders = "" if self.args.perturb == "only_text" else SIGNAL_TOKEN_PLACEHOLDER * self.args.num_encoder_tokens + "\n"
-        for turn in text:
-            if self.args.dev and is_main():
-                print("turn", turn)
-            speaker = turn.get("from", turn.get("role", "")).lower()
-            is_human = speaker in ["human", "user"]
-            role = prompt.roles[0] if is_human else prompt.roles[1]
-            message_value = self.clean_text(turn.get("value", turn.get("content", "")))
-
-            if is_human and turn_count == 0:
-                message_value = f"{signal_token_placeholders}{message_value}"
-                turn_count += 1
-
-            prompt.append_message(role, message_value)
-
-        return prompt.get_prompt()
-
-    def find_signal_token_indices(self, input_ids: list[int]) -> list[int]:
-        signal_token_id = self.llm_tokenizer.convert_tokens_to_ids(SIGNAL_TOKEN_PLACEHOLDER)
-        indices = [i for i, x in enumerate(input_ids) if x == signal_token_id]
-        if not indices:
-            if self.args.dev and is_main():
-                print(f"Signal token ID {signal_token_id} not found in input IDs.")
-            return [-1]
-        return indices
-
-    def truncate_input_preserving_signal_tokens(self, tokens: list[int]) -> list[int]:
-        limit = self.args.llm_input_len
-        overflow = len(tokens) - limit
-        if overflow <= 0:
-            return tokens
-
-        signal_token_id = self.llm_tokenizer.convert_tokens_to_ids(SIGNAL_TOKEN_PLACEHOLDER)
-        bos_token_id = next(iter(HF_LLMS[self.args.llm]["watch_tokens"]["bos_token"]))
-        protected = {signal_token_id, bos_token_id}
-        labels = self.create_labels(tokens)
-        first_signal_idx = next((i for i, t in enumerate(tokens) if t == signal_token_id), len(tokens))
-
-        def priority(i):
-            if i < first_signal_idx:
-                return 2
-            return 1 if labels[i] != -100 else 0
-
-        droppable = sorted([i for i, t in enumerate(tokens) if t not in protected], key=priority)
-        drop = set(droppable[:overflow])
-        return [t for i, t in enumerate(tokens) if i not in drop][-limit:]
-
-    def split_prompt(self, prompt: str) -> Tuple[List[int], List[int]]:
-        splitted_prompt = prompt.split(SIGNAL_TOKEN_PLACEHOLDER, 1)
-        before = self.llm_tokenizer.encode(splitted_prompt[0], add_special_tokens=False)
-        after = self.llm_tokenizer.encode(splitted_prompt[1], add_special_tokens=False)
-        return before, after
-
-    def clean_text(self, message_value: str) -> str:
-        message_value = TAG_RE.sub("", message_value)
-        message_value = IMAGE_WORD_RE.sub(case_preserving_signal, message_value)
-        message_value = LEADING_PREFIX_RE.sub("", message_value)
-        return message_value
-
-    def make_chat_template(
-        self,
-    ):
-        chat_template = get_conv_template(HF_LLMS[self.args.llm]["chat_template"])
-        if HF_LLMS[self.args.llm]["system_prompt"]:
-            system_prompt = self.get_system_prompt()
-            chat_template.set_system_message(system_prompt)
-        return chat_template
-
-    def get_system_prompt(
-        self,
-    ):
-        with open(self.args.system_prompt, encoding="utf-8") as file:
-            return file.read()
-
-    ### SIGNAL FUNCTIONS ###
-    def normalize(self, ecg_signal: np.ndarray) -> Tuple[np.ndarray, Tuple[float, float]]:
-        min_vals = np.min(ecg_signal)
-        max_vals = np.max(ecg_signal)
-        normalized = (ecg_signal - min_vals) / (max_vals - min_vals + self.args.norm_eps)
-        clipped_normalized = np.clip(normalized, 0, 1)
-        return clipped_normalized, (min_vals, max_vals)
-
-    def blackout_ecg(self):
-        c = np.random.choice(np.arange(10))
-        return np.full((len(self.args.leads), self.args.segment_len), c)
-
-    def gauss_noise_ecg(self):
-        return np.random.randn(len(self.args.leads), self.args.segment_len)
-
-    def augment_ecg(self, signal):
-        if random.random() < 0.5:
-            noise_level = 0.05
-            noise = np.random.normal(0, noise_level * np.std(signal), signal.shape)
-            perturbed_signal = signal + noise
-
-            if random.random() < 0.5:
-                wander_amplitude = 0.07 * np.max(np.abs(signal))
-                wander = wander_amplitude * np.sin(np.linspace(0, random.randint(1, 5) * np.pi, signal.shape[1]))
-                wander = np.tile(wander, (signal.shape[0], 1))
-                perturbed_signal += wander
-
-            return perturbed_signal
-        return signal
-
-    ### DEBUGGING FUNCTIONS ###
-    def decode_and_print_mapping(self, input_ids: list[int]) -> None:
-        tokens = self.llm_tokenizer.convert_ids_to_tokens(input_ids)
-        decoded = self.llm_tokenizer.decode(input_ids, skip_special_tokens=False)
-
-        print("=== ECG Token Mapping ===")
-        for tid, tok in zip(input_ids, tokens):
-            print(f"ID {tid:<6} | Token {tok}")
-
-        print("\n=== Full Decoded String ===")
-        print(decoded)
-
-    def check_labels(self, labels):
-        labels_np = np.array(labels)
-        non_neg_indices = np.where(labels_np != -100)[0]
-        if len(non_neg_indices) > 0:
-            non_neg_values = labels_np[non_neg_indices].tolist()
-            tokens = self.llm_tokenizer.convert_ids_to_tokens(non_neg_values)
-            for idx, (token, token_id) in enumerate(zip(tokens, non_neg_values)):
-                print(f"{idx}: {token} -> {token_id}")
-        else:
-            print("No valid labels found (all are -100)")
-        print("=" * 100)
-
-    def check_attention_mask(self, input_ids: list[int], attention_mask: list[int]) -> None:
-        tokens = self.llm_tokenizer.convert_ids_to_tokens(input_ids)
-        print("=== Attention Mask Debug ===")
-        for i, (tid, tok, mask) in enumerate(zip(input_ids, tokens, attention_mask)):
-            flag = "✓" if mask == 1 else "·"
-            print(f"{i:03}: {tid:<6} | {tok:<20} | mask={mask} {flag}")
-        print("=" * 100)
-
-    def assert_range_alignment(self, input_ids: List[int], ranges: List[Tuple[int, int]]) -> None:
-        if getattr(self.args, "train_phase", "sft") == "pretrain":
-            return
-        wt = HF_LLMS[self.args.llm]["watch_tokens"]
-        START = wt["response_start"]["order"]
-        EOS = self.id_set(wt["eos_token"])
-        TP = list(self.think_prefix_ids) if getattr(self.args, "explicit_thinking", False) else []
-        valid_prefixes = [START + TP, START] if TP else [START]
-        for s, e in ranges:
-            if not any(s >= len(p) and input_ids[s - len(p) : s] == p for p in valid_prefixes):
-                raise AssertionError(f"Misaligned start at {s}: expected response_start (or response_start + <think>\\n) immediately before content.")
-            if not (e - 1 >= 0 and input_ids[e - 1] in EOS):
-                raise AssertionError(f"Missing per-turn EOS at end index {e}.")
+if __name__ == "__main__":
+    main()
