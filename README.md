@@ -1,22 +1,23 @@
 <h2 align="center">
-  A Training and Evaluation Framework for ECG-Language Models (ELMs)
+  Scaling ECG-Language Model Reasoning to 13 Million Training Examples
 </h2>
 
 <div align="center">
-  <img src="./assets/fig1_2.png" alt="Our pipeline.">
+  <img src="./assets/orah.png" alt="The Orah Model">
 </div>
 
 ## Overview <a name="overview"></a>
-A research framework for finetuning and evaluating ECG-language models (ELMs). Supports multiple architectures, training objectives, and data representations with distributed training out of the box.
-Prepare datasets with [ECG-Preprocess](https://github.com/ELM-Research/ECG-Preprocess) before use. Additionally, if you want to pretrain an ECG encoder, please view [ECG-Neural-Networks](https://github.com/ELM-Research/ECG-Neural-Networks).
+This is the full training, evaluation, and inferencing code for Orah, an ECG-Language Model scaled to 13 million training examples.
+Prepare datasets with [ECG-Preprocess](https://github.com/ELM-Research/ECG-Preprocess) before use. Additionally, if you want to pretrain SigLEP, please view [ECG-Neural-Networks](https://github.com/ELM-Research/ECG-Neural-Networks).
 
-We hope to continuously update the repository to support more features, ELMs, and datasets. Please feel free to contribute to the repository!
+We previously supported multiple ELM architectures, ECG representations, etc., however, we decided to completely dedicate this repository to training and evaluting Orah. We plan to iterate upon Orah. All updates will be made in this repository. 
+Please feel free to contribute to the repository!
 If there are any questions or bugs, please do not hesitate to reach out to wjhan{@}andrew{dot}cmu{edu} or submit an issue with corresponding details.
 
 > **Status:** Beta.
 
 ## Setup <a name="setup"></a>
-We use torch 2.9 with cuda 12.8 and primarily use H100 NVL NVIDIA GPUs.
+We use torch 2.9.1 with cuda 12.8 and primarily use H100 NVL NVIDIA GPUs.
 
 
 ```bash
@@ -24,7 +25,9 @@ git clone https://github.com/ELM-Research/ELM.git
 cd ELM && uv sync
 ```
 
-If Rust is not installed run `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain=1.82.0 -y`, open a new terminal to set the PATH, and rerun the above commands.
+### Notes
+
+1. To most optimally run Qwen3.5, it is recommended to install `causal-conv1d` and `flash-linear-attention`. We include it in the pyproject.toml file as a default install. However, if one has trouble installing it, please refer to their respective repos, or feel free to ignore the install. Ignoring will simply default Qwen3.5 to less optimized kernels.
 
 ## ECG Datasets <a name="data"></a>
 
@@ -61,20 +64,6 @@ We support the following datasets in a unified way through datasets from Hugging
 | [ECG-QA-CoT](https://github.com/StanfordBDHG/OpenTSLM/tree/main)     | [ELM-Research/ecg-qa-cot](https://huggingface.co/datasets/ELM-Research/ecg-qa-cot)      |
 | [ECG-Protocol-Guided-Grounding-CoT RL](https://huggingface.co/datasets/PKUDigitalHealth/ECG-Protocol-Guided-Grounding-CoT/viewer/rl)     | [ELM-Research/rl-ecg-r1](https://huggingface.co/datasets/ELM-Research/rl-ecg-r1)    
 | [ECG-Protocol-Guided-Grounding-CoT Base](https://huggingface.co/datasets/PKUDigitalHealth/ECG-Protocol-Guided-Grounding-CoT/viewer/base)     | [ELM-Research/base-ecg-r1](https://huggingface.co/datasets/ELM-Research/base-ecg-r1)      |
-
-
-## ECG Representations <a name="representation"></a>
-
-| `--data_representation` | Description |
-|-------------------------|-------------|
-| `signal` | Raw ECG matrix $X \in \mathbb{R}^{C \times L}$ (leads × samples) |
-
-## ELMs
-We implement several ELMs and describe how to train each variant.
-
-`model.name` maps directly to a module in `src/elm/model/`. For example,
-`name: orah` loads `src/elm/model/orah.py`. Each model module implements its
-complete architecture and exposes `build(config, tokenizer)`.
 
 ## Research
 We list research projects that have been conducted using this repository. Please feel free to add your own research here!
