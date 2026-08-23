@@ -20,5 +20,9 @@
 
 
 CUDA_VISIBLE_DEVICES=0,1,2,4,6,7 uv run torchrun \
---standalone --nproc-per-node=6 scripts/profile_training.py \
---config src/elm/config/experiment/pretrain_stage2.yaml --steps 10
+--standalone --nproc-per-node=6 scripts/profile_training.py 2048 \
+--config src/elm/config/experiment/sft_stage1.yaml
+
+CUDA_VISIBLE_DEVICES=0,1,2,4,6,7 uv run torchrun \
+--standalone --nproc-per-node=6 scripts/profile_training.py 2048 \
+--config src/elm/config/experiment/sft_stage2.yaml
