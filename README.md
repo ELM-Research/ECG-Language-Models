@@ -6,6 +6,10 @@
   <img src="./assets/fig1_2.png" alt="Our pipeline.">
 </div>
 
+# Note
+We have made a big refactor since [0.0.2](https://github.com/ELM-Research/ECG-Language-Models/releases/tag/0.0.2).
+The biggest change is that this repository will be built around a specific ELM architecture. We will not be supporting other ECG representations and ELM architectures. If you want to add other representations or architectures, please create a fork and reference [this branch](https://github.com/ELM-Research/ECG-Language-Models/tree/upto-0.0.2).
+
 ## Overview <a name="overview"></a>
 A research framework for finetuning and evaluating ECG-language models (ELMs). Supports multiple architectures, training objectives, and data representations with distributed training out of the box.
 Prepare datasets with [ECG-Preprocess](https://github.com/ELM-Research/ECG-Preprocess) before use. Additionally, if you want to pretrain an ECG encoder, please view [ECG-Neural-Networks](https://github.com/ELM-Research/ECG-Neural-Networks).
