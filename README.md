@@ -74,12 +74,12 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
     </tr>
     <tr>
       <td>Internal Dataset 1</td>
-      <td></td>
+      <td> <span style="color:red"><strong>Not Available</strong></span></td>
       <td align="right">149,929</td>
     </tr>
     <tr>
       <td>Internal Dataset 2</td>
-      <td></td>
+      <td><span style="color:red"><strong>Not Available</strong></span></td>
       <td align="right">65,445</td>
     </tr>
     <tr>
@@ -102,17 +102,17 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
     </tr>
     <tr>
       <td>Internal Dataset 1</td>
-      <td></td>
+      <td><span style="color:red"><strong>Not Available</strong></span></td>
       <td align="right">349,835</td>
     </tr>
     <tr>
       <td>Internal Dataset 2</td>
-      <td></td>
+      <td><span style="color:red"><strong>Not Available</strong></span></td>
       <td align="right">152,706</td>
     </tr>
     <tr>
       <td>Internal Dataset 3</td>
-      <td></td>
+      <td><span style="color:red"><strong>Not Available</strong></span></td>
       <td align="right">11,460</td>
     </tr>
     <tr>
