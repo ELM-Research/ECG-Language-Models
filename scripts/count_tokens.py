@@ -16,7 +16,7 @@ from elm.data.build import DataBuilder
 
 
 DEFAULT_CONFIGS = (
-    Path("src/elm/config/experiment/sft_stage1.yaml"),
+    # Path("src/elm/config/experiment/sft_stage1.yaml"),
     Path("src/elm/config/experiment/sft_stage2.yaml"),
 )
 
@@ -80,7 +80,9 @@ def main():
         stage_counts = Counter()
 
         def token_length(instance):
-            return len(dataset.prepare_text(instance["text"], placeholders)["input_ids"])
+            data_inst = dataset.prepare_text(instance["text"], placeholders)["input_ids"]
+            print(tokenizer.decode(data_inst, skip_special_tokens=False))
+            return len(data_inst)
 
         lengths = threaded_map(token_length, dataset.data, args.workers)
         for index, length in enumerate(tqdm(lengths, total=len(dataset), desc=config_path.stem)):

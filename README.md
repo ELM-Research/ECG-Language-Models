@@ -29,50 +29,36 @@ cd ELM && uv sync
 
 1. To most optimally run Qwen3.5, it is recommended to install `causal-conv1d` and `flash-linear-attention`. We include it in the pyproject.toml file as a default install. However, if one has trouble installing it, please refer to their respective repos, or feel free to ignore the install. Ignoring will simply default Qwen3.5 to less optimized kernels.
 
-## ECG Datasets <a name="data"></a>
+## Training Datasets <a name="data"></a>
 
-First, preprocess the ECGs using the [ecg_preprocess](https://github.com/ELM-Research/ecg_preprocess) repository.
-The structure in which the `data` folder should be in is the following:
+First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Research/ECG-Preprocess) repository.
 
-```
-data
-├── csn
-│   ├── preprocessed_1250
-│   ├── preprocessed_500
-│   └── preprocessed_2500
-├── cpsc
-│   └── ...
-├── ptb_xl
-│   └── ...
-├── mimic_iv
-│   └── ...
-└── code15
-    └── ...
-```
 
-We support the following datasets in a unified way through datasets from HuggingFace. These datasets will include the `ecg_path` which is the path to the `.npy` files in the `data` folder. It will also include the conversational data (`text`).
+| Stage              | Trainable Modules | Epochs | Dataset                                                                                  | Hugging Face Dataset |        Samples |
+| ------------------ | ----------------- | -----: | ---------------------------------------------------------------------------------------- | -------------------- | -------------: |
+| SigLEP Pretraining | Encoder           |     30 | [Harvard-Emory ECG Database (HEEDB)](https://bdsp.io/content/heedb/)                                                         |                      |      1,927,353 |
+|                    |                   |        | **Total**                                                                                |                      |  **1,927,353** |
+| Orah Pretraining 1 | Connector         |     3 | [EchoNext](https://physionet.org/content/echonext/1.1.1/)                                                |                      |         24,763 |
+|                    |                   |        | [Harvard-Emory ECG Database (HEEDB)](https://bdsp.io/content/heedb/)                                                         |                      |        642,451 |
+|                    |                   |        | **Total**                                                                                |                      |    **667,214** |
+| Orah Pretraining 2 | Connector, LLM    |      1 | [EchoNext](https://physionet.org/content/echonext/1.1.1/)                                                |                      |         57,780 |
+|                    |                   |        | [Harvard-Emory ECG Database (HEEDB)](https://bdsp.io/content/heedb/)                                                         |                      |      5,996,208 |
+|                    |                   |        | **Total**                                                                                |                      |  **6,053,988** |
+| Orah SFT 1         | Connector, LLM    |      3 | [ECG-QA MIMIC-IV](https://github.com/Jwoo5/ecg-qa)                        |                      |        352,382 |
+|                    |                   |        | [Pretrain MIMIC](https://github.com/YubaoZhao/ECG-Chat)                              |                      |        502,687 |
+|                    |                   |        | [ECG-Instruct 45K](https://github.com/YubaoZhao/ECG-Chat)                            |                      |         44,778 |
+|                    |                   |        | [ECG-Grounding](https://github.com/lanxiang1017/GEM)                            |                      |        353,210 |
+|                    |                   |        | **Total**                                                                                |                      |  **1,253,057** |
+| Orah SFT 2         | Connector, LLM    |      3 | [ECG-QA MIMIC-IV](https://github.com/Jwoo5/ecg-qa)                        |                      |        822,226 |
+|                    |                   |        | [ECG-Grounding](https://github.com/lanxiang1017/GEM)                                   |                      |        824,158 |
+|                    |                   |        | [ECG-Instruct ECG-R1](https://github.com/PKUDigitalHealth/ECG-R1)               |                      |      1,147,368 |
+|                    |                   |        | [ECG Protocol-Guided Grounding CoT](https://github.com/PKUDigitalHealth/ECG-R1) |                      |         30,000 |
+|                    |                   |        | [ECG-QA-CoT](https://github.com/OpenTSLM/OpenTSLM/tree/main)                            |                      |        159,313 |
+|                    |                   |        | **Total**                                                                                |                      |  **2,983,065** |
+| Orah RL            | Connector, LLM    |      3 | [RL ECG-R1](https://github.com/PKUDigitalHealth/ECG-R1)                         |                      |          3,948 |
+|                    |                   |        | **Total**                                                                                |                      |      **3,948** |
+|                    |                   |        | **Grand Total**                                                                          |                      | **12,888,625** |
 
-| `--data`  | Link        |
-|----------|------------|
-| [ECG-QA PTB-XL](https://arxiv.org/abs/2306.15681)  | [ELM-Research/ecg-qa-ptbxl-250-2500](https://huggingface.co/datasets/ELM-Research/ecg-qa-ptbxl-250-2500)   |
-| [ECG-QA MIMIC-IV-ECG](https://arxiv.org/abs/2306.15681) | [ELM-Research/ecg-qa-mimic-iv-ecg-250-2500](https://huggingface.co/datasets/ELM-Research/ecg-qa-mimic-iv-ecg-250-2500) |
-| [Pretrain Mimic](https://arxiv.org/abs/2408.08849)  | [ELM-Research/pretrain-mimic-250-2500](https://huggingface.co/datasets/ELM-Research/pretrain-mimic-250-2500)   |
-| [ECG-Grounding](https://www.arxiv.org/abs/2503.06073)    | [ELM-Research/ecg-grounding-250-2500](https://huggingface.co/datasets/ELM-Research/ecg-grounding-250-2500)     |
-| [ECG-Instruct Pulse](https://arxiv.org/abs/2410.19008)     | [ELM-Research/ecg-instruct-pulse-250-2500](https://huggingface.co/datasets/ELM-Research/ecg-instruct-pulse-250-2500)      |
-| [ECG-Bench Pulse](https://arxiv.org/abs/2410.19008)     | [ELM-Research/ecg-bench-pulse-250-2500](https://huggingface.co/datasets/ELM-Research/ecg-bench-pulse-250-2500)      |
-| [ECG-Instruct 45k](https://arxiv.org/abs/2408.08849)     | [ELM-Research/ecg-instruct-45k-250-2500](https://huggingface.co/datasets/ELM-Research/ecg-instruct-45k-250-2500)      |
-| [ECG-QA-CoT](https://github.com/StanfordBDHG/OpenTSLM/tree/main)     | [ELM-Research/ecg-qa-cot](https://huggingface.co/datasets/ELM-Research/ecg-qa-cot)      |
-| [ECG-Protocol-Guided-Grounding-CoT RL](https://huggingface.co/datasets/PKUDigitalHealth/ECG-Protocol-Guided-Grounding-CoT/viewer/rl)     | [ELM-Research/rl-ecg-r1](https://huggingface.co/datasets/ELM-Research/rl-ecg-r1)    
-| [ECG-Protocol-Guided-Grounding-CoT Base](https://huggingface.co/datasets/PKUDigitalHealth/ECG-Protocol-Guided-Grounding-CoT/viewer/base)     | [ELM-Research/base-ecg-r1](https://huggingface.co/datasets/ELM-Research/base-ecg-r1)      |
-
-## Research
-We list research projects that have been conducted using this repository. Please feel free to add your own research here!
-
-- [ECG-Byte: A Tokenizer for End-to-End Generative Electrocardiogram Language Modeling
-](https://arxiv.org/abs/2412.14373)
-- [Signal, Image, or Symbolic: Exploring the Best Input Representation for Electrocardiogram-Language Models Through a Unified Framework](https://arxiv.org/abs/2505.18847)
-- [Retrieval-Augmented Generation for Electrocardiogram-Language Models](https://arxiv.org/abs/2510.00261)
-- [ELF: A Family of Encoder-Free ECG-Language Models](https://arxiv.org/abs/2601.18798)
 
 ## Contributions <a name="contributions"></a>
 
@@ -91,4 +77,4 @@ Lastly, we thank [HuggingFace](https://huggingface.co/) for providing the APIs f
 
 ## License
 
-MIT, except all third-party models and datasets used in the repository. Please refer to the third-party model and dataset's corresponding licenses.
+MIT, except all third-party libraries, models, and datasets used in the repository. Please refer to the third-party library, model and dataset's corresponding licenses.
