@@ -59,7 +59,6 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
       <td></td>
       <td align="right"><strong>1,927,353</strong></td>
     </tr>
-
     <tr>
       <td rowspan="3">Orah Pretraining 1</td>
       <td rowspan="3">Connector</td>
@@ -78,7 +77,6 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
       <td></td>
       <td align="right"><strong>667,214</strong></td>
     </tr>
-
     <tr>
       <td rowspan="3">Orah Pretraining 2</td>
       <td rowspan="3">Connector, LLM</td>
@@ -97,7 +95,6 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
       <td></td>
       <td align="right"><strong>6,053,988</strong></td>
     </tr>
-
     <tr>
       <td rowspan="5">Orah SFT 1</td>
       <td rowspan="5">Connector, LLM</td>
@@ -126,7 +123,6 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
       <td></td>
       <td align="right"><strong>1,253,057</strong></td>
     </tr>
-
     <tr>
       <td rowspan="6">Orah SFT 2</td>
       <td rowspan="6">Connector, LLM</td>
@@ -160,7 +156,6 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
       <td></td>
       <td align="right"><strong>2,983,065</strong></td>
     </tr>
-
     <tr>
       <td rowspan="2">Orah RL</td>
       <td rowspan="2">Connector, LLM</td>
@@ -174,7 +169,6 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
       <td></td>
       <td align="right"><strong>3,948</strong></td>
     </tr>
-
     <tr>
       <td colspan="5" align="right"><strong>Grand Total</strong></td>
       <td align="right"><strong>12,888,625</strong></td>
