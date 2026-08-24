@@ -1,5 +1,4 @@
 import os
-
 import torch
 from torch import distributed
 from torch.distributed.fsdp import (
@@ -35,21 +34,13 @@ def init_dist(strategy: str | None) -> None:
     distributed.init_process_group(device_id=device)
 
 
-def get_local_rank() -> int:
-    return int(os.environ.get("LOCAL_RANK", 0))
+def get_local_rank() -> int: return int(os.environ.get("LOCAL_RANK", 0))
 
+def get_rank() -> int: return distributed.get_rank() if distributed.is_initialized() else 0
 
-def get_rank() -> int:
-    return distributed.get_rank() if distributed.is_initialized() else 0
+def get_world_size() -> int: return distributed.get_world_size() if distributed.is_initialized() else 1
 
-
-def get_world_size() -> int:
-    return distributed.get_world_size() if distributed.is_initialized() else 1
-
-
-def is_main() -> bool:
-    return get_rank() == 0
-
+def is_main() -> bool: return get_rank() == 0
 
 def print_training_setup(config: dict) -> None:
     if not is_main():
@@ -79,7 +70,6 @@ def print_training_setup(config: dict) -> None:
             flush=True,
         )
 
-
 def distributed_mean(total: float, count: float, device: torch.device) -> float:
     stats = torch.tensor((total, count), dtype=torch.float64, device=device)
     if distributed.is_initialized():
@@ -92,7 +82,6 @@ def any_process(value: bool, device: torch.device) -> bool:
     if distributed.is_initialized():
         distributed.all_reduce(flag, op=distributed.ReduceOp.MAX)
     return bool(flag.item())
-
 
 def set_gradient_sync(model: torch.nn.Module, enabled: bool) -> None:
     if isinstance(model, FSDPModule):
@@ -120,10 +109,8 @@ def setup_model(model: torch.nn.Module, gpu_config: str | None) -> torch.nn.Modu
     print_parallelism(model)
     return model
 
-
 def get_device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 def print_parallelism(model: torch.nn.Module) -> None:
     parameters = list(model.parameters())

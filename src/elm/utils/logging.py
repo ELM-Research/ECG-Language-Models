@@ -4,7 +4,6 @@ import time
 import wandb
 from pathlib import Path
 import yaml
-
 from elm.utils.parallelism import is_main
 
 def setup_wandb(config, project = "Orah", name = None):

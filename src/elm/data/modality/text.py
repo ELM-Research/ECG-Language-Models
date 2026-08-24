@@ -5,12 +5,10 @@ from elm.utils.constants import (
     TAG_RE,
 )
 
-
 def clean_text(text: str) -> str:
     text = TAG_RE.sub("", text)
     text = IMAGE_WORD_RE.sub(lambda match: "Signal" if match[1][0].isupper() else "signal", text)
     return LEADING_PREFIX_RE.sub("", text)
-
 
 def normalize_text(text: list[dict], system_prompt: str = None) -> list[dict[str, str]]:
     normalized = []
@@ -21,7 +19,6 @@ def normalize_text(text: list[dict], system_prompt: str = None) -> list[dict[str
         content = next((message[key] for key in ("content", "value") if key in message), None)
         normalized.append({"role": ROLES[role.strip().lower()], "content": clean_text(content)})
     return normalized
-
 
 def chat_prompt(tokenizer, messages: list[dict], explicit_thinking: bool) -> str:
     prompt = tokenizer.apply_chat_template(
@@ -34,7 +31,6 @@ def chat_prompt(tokenizer, messages: list[dict], explicit_thinking: bool) -> str
     if not explicit_thinking:
         prompt = prompt[:-len(think_prompt)]
     return prompt
-
 
 class Text:
     def __init__(self, llm_tokenizer, truncation_length, training_stage,

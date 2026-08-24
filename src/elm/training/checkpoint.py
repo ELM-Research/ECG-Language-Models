@@ -1,5 +1,4 @@
 from pathlib import Path
-
 import torch
 from torch import distributed
 from torch.distributed.checkpoint.state_dict import (
@@ -8,7 +7,6 @@ from torch.distributed.checkpoint.state_dict import (
     get_optimizer_state_dict,
     set_optimizer_state_dict,
 )
-
 from elm.utils.parallelism import is_main
 
 

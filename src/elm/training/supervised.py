@@ -1,10 +1,8 @@
 from torch.nn.functional import pad
 from tqdm import tqdm
-
 from elm.training.common import begin_epoch, move_to_device, optimizer_step
 from elm.utils.logging import log_wandb
 from elm.utils.parallelism import distributed_mean, is_main, set_gradient_sync
-
 
 def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, config: dict,
                 epoch: int, start_batch: int = 0) -> dict:
