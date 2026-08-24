@@ -34,32 +34,153 @@ cd ELM && uv sync
 First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Research/ECG-Preprocess) repository.
 
 
-| Stage              | Trainable Modules | Epochs | Dataset                                                                                  | Hugging Face Dataset |        Samples |
-| ------------------ | ----------------- | -----: | ---------------------------------------------------------------------------------------- | -------------------- | -------------: |
-| SigLEP Pretraining | Encoder           |     30 | [Harvard-Emory ECG Database (HEEDB)](https://bdsp.io/content/heedb/)                                                         |                      |      1,927,353 |
-|                    |                   |        | **Total**                                                                                |                      |  **1,927,353** |
-| Orah Pretraining 1 | Connector         |     3 | [EchoNext](https://physionet.org/content/echonext/1.1.1/)                                                |                      |         24,763 |
-|                    |                   |        | [Harvard-Emory ECG Database (HEEDB)](https://bdsp.io/content/heedb/)                                                         |                      |        642,451 |
-|                    |                   |        | **Total**                                                                                |                      |    **667,214** |
-| Orah Pretraining 2 | Connector, LLM    |      1 | [EchoNext](https://physionet.org/content/echonext/1.1.1/)                                                |                      |         57,780 |
-|                    |                   |        | [Harvard-Emory ECG Database (HEEDB)](https://bdsp.io/content/heedb/)                                                         |                      |      5,996,208 |
-|                    |                   |        | **Total**                                                                                |                      |  **6,053,988** |
-| Orah SFT 1         | Connector, LLM    |      3 | [ECG-QA MIMIC-IV](https://github.com/Jwoo5/ecg-qa)                        |                      |        352,382 |
-|                    |                   |        | [Pretrain MIMIC](https://github.com/YubaoZhao/ECG-Chat)                              |                      |        502,687 |
-|                    |                   |        | [ECG-Instruct 45K](https://github.com/YubaoZhao/ECG-Chat)                            |                      |         44,778 |
-|                    |                   |        | [ECG-Grounding](https://github.com/lanxiang1017/GEM)                            |                      |        353,210 |
-|                    |                   |        | **Total**                                                                                |                      |  **1,253,057** |
-| Orah SFT 2         | Connector, LLM    |      3 | [ECG-QA MIMIC-IV](https://github.com/Jwoo5/ecg-qa)                        |                      |        822,226 |
-|                    |                   |        | [ECG-Grounding](https://github.com/lanxiang1017/GEM)                                   |                      |        824,158 |
-|                    |                   |        | [ECG-Instruct ECG-R1](https://github.com/PKUDigitalHealth/ECG-R1)               |                      |      1,147,368 |
-|                    |                   |        | [ECG Protocol-Guided Grounding CoT](https://github.com/PKUDigitalHealth/ECG-R1) |                      |         30,000 |
-|                    |                   |        | [ECG-QA-CoT](https://github.com/OpenTSLM/OpenTSLM/tree/main)                            |                      |        159,313 |
-|                    |                   |        | **Total**                                                                                |                      |  **2,983,065** |
-| Orah RL            | Connector, LLM    |      3 | [RL ECG-R1](https://github.com/PKUDigitalHealth/ECG-R1)                         |                      |          3,948 |
-|                    |                   |        | **Total**                                                                                |                      |      **3,948** |
-|                    |                   |        | **Grand Total**                                                                          |                      | **12,888,625** |
+<table>
+  <thead>
+    <tr>
+      <th>Stage</th>
+      <th>Trainable Modules</th>
+      <th align="right">Epochs</th>
+      <th>Dataset</th>
+      <th>Hugging Face Dataset</th>
+      <th align="right">Samples</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td rowspan="2">SigLEP Pretraining</td>
+      <td rowspan="2">Encoder</td>
+      <td rowspan="2" align="right">30</td>
+      <td><a href="https://bdsp.io/content/heedb/">Harvard-Emory ECG Database (HEEDB)</a></td>
+      <td></td>
+      <td align="right">1,927,353</td>
+    </tr>
+    <tr>
+      <td><strong>Total</strong></td>
+      <td></td>
+      <td align="right"><strong>1,927,353</strong></td>
+    </tr>
 
+    <tr>
+      <td rowspan="3">Orah Pretraining 1</td>
+      <td rowspan="3">Connector</td>
+      <td rowspan="3" align="right">3</td>
+      <td><a href="https://physionet.org/content/echonext/1.1.1/">EchoNext</a></td>
+      <td></td>
+      <td align="right">24,763</td>
+    </tr>
+    <tr>
+      <td><a href="https://bdsp.io/content/heedb/">Harvard-Emory ECG Database (HEEDB)</a></td>
+      <td></td>
+      <td align="right">642,451</td>
+    </tr>
+    <tr>
+      <td><strong>Total</strong></td>
+      <td></td>
+      <td align="right"><strong>667,214</strong></td>
+    </tr>
 
+    <tr>
+      <td rowspan="3">Orah Pretraining 2</td>
+      <td rowspan="3">Connector, LLM</td>
+      <td rowspan="3" align="right">1</td>
+      <td><a href="https://physionet.org/content/echonext/1.1.1/">EchoNext</a></td>
+      <td></td>
+      <td align="right">57,780</td>
+    </tr>
+    <tr>
+      <td><a href="https://bdsp.io/content/heedb/">Harvard-Emory ECG Database (HEEDB)</a></td>
+      <td></td>
+      <td align="right">5,996,208</td>
+    </tr>
+    <tr>
+      <td><strong>Total</strong></td>
+      <td></td>
+      <td align="right"><strong>6,053,988</strong></td>
+    </tr>
+
+    <tr>
+      <td rowspan="5">Orah SFT 1</td>
+      <td rowspan="5">Connector, LLM</td>
+      <td rowspan="5" align="right">3</td>
+      <td><a href="https://github.com/Jwoo5/ecg-qa">ECG-QA MIMIC-IV</a></td>
+      <td></td>
+      <td align="right">352,382</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/YubaoZhao/ECG-Chat">Pretrain MIMIC</a></td>
+      <td></td>
+      <td align="right">502,687</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/YubaoZhao/ECG-Chat">ECG-Instruct 45K</a></td>
+      <td></td>
+      <td align="right">44,778</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/lanxiang1017/GEM">ECG-Grounding</a></td>
+      <td></td>
+      <td align="right">353,210</td>
+    </tr>
+    <tr>
+      <td><strong>Total</strong></td>
+      <td></td>
+      <td align="right"><strong>1,253,057</strong></td>
+    </tr>
+
+    <tr>
+      <td rowspan="6">Orah SFT 2</td>
+      <td rowspan="6">Connector, LLM</td>
+      <td rowspan="6" align="right">3</td>
+      <td><a href="https://github.com/Jwoo5/ecg-qa">ECG-QA MIMIC-IV</a></td>
+      <td></td>
+      <td align="right">822,226</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/lanxiang1017/GEM">ECG-Grounding</a></td>
+      <td></td>
+      <td align="right">824,158</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/PKUDigitalHealth/ECG-R1">ECG-Instruct ECG-R1</a></td>
+      <td></td>
+      <td align="right">1,147,368</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/PKUDigitalHealth/ECG-R1">ECG Protocol-Guided Grounding CoT</a></td>
+      <td></td>
+      <td align="right">30,000</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/OpenTSLM/OpenTSLM/tree/main">ECG-QA-CoT</a></td>
+      <td></td>
+      <td align="right">159,313</td>
+    </tr>
+    <tr>
+      <td><strong>Total</strong></td>
+      <td></td>
+      <td align="right"><strong>2,983,065</strong></td>
+    </tr>
+
+    <tr>
+      <td rowspan="2">Orah RL</td>
+      <td rowspan="2">Connector, LLM</td>
+      <td rowspan="2" align="right">3</td>
+      <td><a href="https://github.com/PKUDigitalHealth/ECG-R1">RL ECG-R1</a></td>
+      <td></td>
+      <td align="right">3,948</td>
+    </tr>
+    <tr>
+      <td><strong>Total</strong></td>
+      <td></td>
+      <td align="right"><strong>3,948</strong></td>
+    </tr>
+
+    <tr>
+      <td colspan="5" align="right"><strong>Grand Total</strong></td>
+      <td align="right"><strong>12,888,625</strong></td>
+    </tr>
+  </tbody>
+</table>
 ## Contributions <a name="contributions"></a>
 
 We welcome contributions to the repository! Please feel free to open an issue or pull request for any bugs or features you would like to add. We are always looking for new ECG datasets to benchmark our methods on. If you have any recommendations, please let us know!
