@@ -1,5 +1,5 @@
+# Soft Adaptive Policy Adaptation https://arxiv.org/abs/2511.20347
 import torch
-
 
 def compute_policy_loss_sapo(
     old_log_prob: torch.Tensor,
@@ -11,15 +11,10 @@ def compute_policy_loss_sapo(
     global_batch_size: int | None = None,
     dp_size: int = 1,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute the sequence-mean/token-mean SAPO policy loss."""
-    if tau_pos <= 0 or tau_neg <= 0:
-        raise ValueError(f"tau_pos and tau_neg must be > 0, got tau_pos={tau_pos}, tau_neg={tau_neg}")
     tau_pos = torch.as_tensor(tau_pos, dtype=advantages.dtype, device=advantages.device)
     tau_neg = torch.as_tensor(tau_neg, dtype=advantages.dtype, device=advantages.device)
-
     log_ratio = (log_prob - old_log_prob).clamp(min=-20.0, max=20.0)
     ratio = log_ratio.exp()
-
     taus = torch.where(advantages > 0, tau_pos, tau_neg)
     gate_probs = torch.sigmoid(taus * (ratio - 1.0))
     gates = gate_probs * (4.0 / taus)
