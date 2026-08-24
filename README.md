@@ -29,10 +29,7 @@ cd ELM && uv sync
 
 1. To most optimally run Qwen3.5, it is recommended to install `causal-conv1d` and `flash-linear-attention`. We include it in the pyproject.toml file as a default install. However, if one has trouble installing it, please refer to their respective repos, or feel free to ignore the install. Ignoring will simply default Qwen3.5 to less optimized kernels.
 
-## Training Datasets <a name="data"></a>
-
-First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Research/ECG-Preprocess) repository.
-
+## Training Details <a name="data"></a>
 
 <table>
   <thead>
@@ -200,6 +197,18 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
     </tr>
   </tbody>
 </table>
+
+### Datasets
+First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Research/ECG-Preprocess) repository.
+We provide the instructions to preprocess all datasets besides the internal datasets.
+We note that the user simply has to preprocess the **HEEDB, EchoNext, PTB-XL, and MIMIC-IV-ECG Base datasets**.
+We provide preprocessed HuggingFace datasets that contains the text and ECG path and use these during training.
+
+### Training Stages
+
+<div align="center">
+  <img src="./assets/training_fig.png" alt="Training Stages">
+</div>
 
 ## Contributions <a name="contributions"></a>
 
