@@ -30,14 +30,4 @@
 
 * Follow established conventions consistently. Do not introduce shorthand that reduces clarity.
 
-When writing a commit message, follow these seven rules:
-
-1. Separate the subject line from the body with a single blank line.
-2. Limit the subject line to 50 characters. The absolute limit is 72.
-3. Capitalize the first letter of the subject line.
-4. Do not end the subject line with a period.
-5. Use the imperative mood in the subject line. It must complete: “If applied, this commit will [subject line].”
-6. Wrap the body manually at 72 characters.
-7. Use the body to explain what and why, not how. Assume the changes explain the how.
-
 * When correcting an error, first reproduce it with a verifiable check. Observe the failure. Make the smallest necessary correction. Observe the check passing.
