@@ -60,9 +60,9 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
       <td align="right"><strong>1,927,353</strong></td>
     </tr>
     <tr>
-      <td rowspan="3">Orah Pretraining 1</td>
-      <td rowspan="3">Connector</td>
-      <td rowspan="3" align="right">3</td>
+      <td rowspan="5">Orah Pretraining 1</td>
+      <td rowspan="5">Connector</td>
+      <td rowspan="5" align="right">3</td>
       <td><a href="https://physionet.org/content/echonext/1.1.1/">EchoNext</a></td>
       <td></td>
       <td align="right">24,763</td>
@@ -73,14 +73,24 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
       <td align="right">642,451</td>
     </tr>
     <tr>
-      <td><strong>Total</strong></td>
+      <td>Internal Dataset 1</td>
       <td></td>
-      <td align="right"><strong>667,214</strong></td>
+      <td align="right">149,929</td>
     </tr>
     <tr>
-      <td rowspan="3">Orah Pretraining 2</td>
-      <td rowspan="3">Connector, LLM</td>
-      <td rowspan="3" align="right">1</td>
+      <td>Internal Dataset 2</td>
+      <td></td>
+      <td align="right">65,445</td>
+    </tr>
+    <tr>
+      <td><strong>Total</strong></td>
+      <td></td>
+      <td align="right"><strong>882,588</strong></td>
+    </tr>
+    <tr>
+      <td rowspan="6">Orah Pretraining 2</td>
+      <td rowspan="6">Connector, LLM</td>
+      <td rowspan="6" align="right">1</td>
       <td><a href="https://physionet.org/content/echonext/1.1.1/">EchoNext</a></td>
       <td></td>
       <td align="right">57,780</td>
@@ -91,9 +101,24 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
       <td align="right">5,996,208</td>
     </tr>
     <tr>
+      <td>Internal Dataset 1</td>
+      <td></td>
+      <td align="right">349,835</td>
+    </tr>
+    <tr>
+      <td>Internal Dataset 2</td>
+      <td></td>
+      <td align="right">152,706</td>
+    </tr>
+    <tr>
+      <td>Internal Dataset 3</td>
+      <td></td>
+      <td align="right">11,460</td>
+    </tr>
+    <tr>
       <td><strong>Total</strong></td>
       <td></td>
-      <td align="right"><strong>6,053,988</strong></td>
+      <td align="right"><strong>6,567,989</strong></td>
     </tr>
     <tr>
       <td rowspan="5">Orah SFT 1</td>
@@ -171,7 +196,7 @@ First, preprocess the ECGs using the [ECG-Preprocess](https://github.com/ELM-Res
     </tr>
     <tr>
       <td colspan="5" align="right"><strong>Grand Total</strong></td>
-      <td align="right"><strong>12,888,625</strong></td>
+      <td align="right"><strong>13,618,000</strong></td>
     </tr>
   </tbody>
 </table>
