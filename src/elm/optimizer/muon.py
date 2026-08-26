@@ -1,4 +1,5 @@
-# Original implementatino https://github.com/samsja/muon_fsdp_2
+# FSDP2 compliant muon
+# Original implementation https://github.com/samsja/muon_fsdp_2
 # Modified by willxxy
 
 import math

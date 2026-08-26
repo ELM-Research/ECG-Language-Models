@@ -5,12 +5,10 @@ from elm.utils.constants import (
     TAG_RE,
 )
 
-
 def clean_text(text: str) -> str:
     text = TAG_RE.sub("", text)
     text = IMAGE_WORD_RE.sub(lambda match: "Signal" if match[1][0].isupper() else "signal", text)
     return LEADING_PREFIX_RE.sub("", text)
-
 
 def normalize_text(text: list[dict], system_prompt: str = None) -> list[dict[str, str]]:
     normalized = []
@@ -21,7 +19,6 @@ def normalize_text(text: list[dict], system_prompt: str = None) -> list[dict[str
         content = next((message[key] for key in ("content", "value") if key in message), None)
         normalized.append({"role": ROLES[role.strip().lower()], "content": clean_text(content)})
     return normalized
-
 
 def chat_prompt(tokenizer, messages: list[dict], explicit_thinking: bool) -> str:
     prompt = tokenizer.apply_chat_template(
@@ -34,7 +31,6 @@ def chat_prompt(tokenizer, messages: list[dict], explicit_thinking: bool) -> str
     if not explicit_thinking:
         prompt = prompt[:-len(think_prompt)]
     return prompt
-
 
 class Text:
     def __init__(self, llm_tokenizer, truncation_length, training_stage,
@@ -99,13 +95,13 @@ class Text:
             conversation[len(prompt):], add_special_tokens=False)
         im_end = self.llm_tokenizer.convert_tokens_to_ids("<|im_end|>")
         response_ids = response_ids[:response_ids.index(im_end) + 1]
-        if self.truncate and len(prompt_ids) + len(response_ids) > self.truncation_length:
-            available = self.truncation_length - len(prompt_ids)
-            if available < 1:
-                raise ValueError("The SFT prompt exceeds the truncation length")
-            response_ids = response_ids[:available - 1] + [im_end]
         input_ids = prompt_ids + response_ids
         labels = [-100] * len(prompt_ids) + response_ids
+        if self.truncate and len(input_ids) > self.truncation_length:
+            input_ids = input_ids[:self.truncation_length]
+            labels = labels[:self.truncation_length]
+            if any(label != -100 for label in labels):
+                input_ids[-1] = labels[-1] = im_end
         return {
             "input_ids": input_ids,
             "attention_mask": [1] * len(input_ids),

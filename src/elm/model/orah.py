@@ -186,8 +186,9 @@ def lora_from_config(config):
     }
 
 
-def load_checkpoint(path):
-    model, loading = Orah.from_pretrained(path, output_loading_info=True)
+def load_checkpoint(path, device_map = None):
+    model, loading = Orah.from_pretrained(path, output_loading_info=True,
+                                          device_map=device_map)
     if loading["missing_keys"] or loading["unexpected_keys"]:
         raise ValueError("Checkpoint weights do not match the saved configuration")
     return model
@@ -198,7 +199,7 @@ def build(config, tokenizer):
     lora = lora_from_config(model_config)
     checkpoint = model_config.get("checkpoint")
     if checkpoint:
-        model = load_checkpoint(checkpoint)
+        model = load_checkpoint(checkpoint, config["gpu"].get("device_map"))
         model.set_lora(lora)
     else:
         language_model = AutoModelForCausalLM.from_pretrained(model_config["language_model"])

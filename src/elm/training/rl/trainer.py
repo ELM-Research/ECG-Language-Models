@@ -1,5 +1,4 @@
 from tqdm import tqdm
-
 from elm.training.common import begin_epoch, move_to_device, optimizer_step
 from elm.training.rl.rollout import current_log_prob, rollout_group
 from elm.training.rl.sapo.sapo_loss import compute_policy_loss_sapo
@@ -11,7 +10,6 @@ from elm.utils.parallelism import (
     is_main,
     set_gradient_sync,
 )
-
 
 def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, tokenizer,
                 config: dict, epoch: int, start_batch: int = 0) -> dict:

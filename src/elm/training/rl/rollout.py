@@ -1,13 +1,10 @@
 import torch
-
 from elm.training.rl.rewards import reward_components
-
 
 def eos_set(model) -> set:
     generation_model = getattr(model, "language_model", model)
     eos = generation_model.generation_config.eos_token_id
     return {eos} if isinstance(eos, int) else set(eos or ())
-
 
 def trim_mask(new_tokens: torch.Tensor, eos_ids: set, pad_id: int | None = None) -> torch.Tensor:
     is_eos = torch.zeros_like(new_tokens, dtype=torch.bool)
@@ -18,12 +15,10 @@ def trim_mask(new_tokens: torch.Tensor, eos_ids: set, pad_id: int | None = None)
         mask &= new_tokens != pad_id
     return mask
 
-
 def _decode_for_reward(tokenizer, ids: torch.Tensor, strip_ids: set) -> str:
     kept = [int(t) for t in ids.tolist() if int(t) not in strip_ids]
     return tokenizer.decode(kept, skip_special_tokens=False,
                             clean_up_tokenization_spaces=False).strip()
-
 
 def final_response_range(labels: torch.Tensor) -> tuple[int, int]:
     indices = labels.ne(-100).nonzero(as_tuple=True)[0]
@@ -32,7 +27,6 @@ def final_response_range(labels: torch.Tensor) -> tuple[int, int]:
     gaps = (indices[1:] != indices[:-1] + 1).nonzero(as_tuple=True)[0]
     start = indices[gaps[-1] + 1] if gaps.numel() else indices[0]
     return start.item(), indices[-1].item() + 1
-
 
 def log_prob_at_response(model, ids, attn, ecg, pL: int, temperature: float) -> torch.Tensor:
     targets = ids[:, pL:]
@@ -51,7 +45,6 @@ def log_prob_at_response(model, ids, attn, ecg, pL: int, temperature: float) -> 
     logits = out.logits[:, -targets.shape[1] - 1:-1].float() / temperature
     selected = logits.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
     return selected - logits.logsumexp(dim=-1)
-
 
 def rollout_group(
     model,

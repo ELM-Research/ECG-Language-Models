@@ -134,7 +134,7 @@ class DataBuilder:
     def print_training_example(self, example, tokenizer):
         input_ids = example["input_ids"]
         labels = example["labels"]
-        response_start = next(i for i, label in enumerate(labels) if label != -100)
+        response_start = next((i for i, label in enumerate(labels) if label != -100), len(labels))
         target_ids = [label for label in labels[response_start:] if label != -100]
         print(f"\n=== Training formulation ({self.training_stage}) ===")
         print(f"explicit_thinking: {self.explicit_thinking}")
