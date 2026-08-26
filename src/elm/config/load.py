@@ -14,7 +14,6 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
 
     return result
 
-
 def load_config(path: str | Path, stack: tuple[Path, ...] = ()) -> dict[str, Any]:
     path = Path(path).resolve()
 
