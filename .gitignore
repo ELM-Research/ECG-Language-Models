@@ -221,4 +221,5 @@ src/test.py
 ecg-plot-main/
 src/main_analyze_results.py
 scripts/convert_siglip2_ckpt.py
-src/elm/results
+src/elm/results/
+results/
