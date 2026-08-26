@@ -23,6 +23,8 @@ def fold_config(config: dict, fold) -> dict:
 def main() -> None:
     config, _ = get_config()
     folds, seeds = config["evaluation"]["folds"], config["evaluation"]["seeds"]
+    dataset_key = "_".join(name.strip("/").replace("/", "_")
+                           for name in config["data"]["data_names"])
 
     run_summaries = []
     output_dirs = set()
@@ -30,10 +32,11 @@ def main() -> None:
         current = fold_config(config, fold)
         checkpoint = current["model"].get("checkpoint")
         if checkpoint:
-            run_dir = Path(checkpoint)
+            base_dir = Path(checkpoint)
         else:
-            run_dir = Path(current["evaluation"]["output_dir"]) / "zero_shot"
-            run_dir.mkdir(parents=True, exist_ok=True)
+            base_dir = Path(current["evaluation"]["output_dir"]) / "zero_shot"
+        run_dir = base_dir / dataset_key
+        run_dir.mkdir(parents=True, exist_ok=True)
         output_dirs.add(run_dir)
         set_seed(seeds[0])
         tokenizer, dataset = build_data(current, training=False)

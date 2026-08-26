@@ -91,6 +91,8 @@ def set_gradient_sync(model: torch.nn.Module, enabled: bool) -> None:
 def setup_model(model: torch.nn.Module, gpu_config: str | None) -> torch.nn.Module:
     if gpu_config["gradient_checkpointing"]:
         model.gradient_checkpointing_enable({"use_reentrant": False})
+    if gpu_config.get("device_map"):
+        return model
     if gpu_config["strategy"] is None:
         return model.to(get_device())
 

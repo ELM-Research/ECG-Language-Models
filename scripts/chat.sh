@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=5 uv run python -m elm.chat \
+CUDA_VISIBLE_DEVICES=3,5 uv run python -m elm.chat \
 --config src/elm/config/experiment/chat.yaml
 
 
