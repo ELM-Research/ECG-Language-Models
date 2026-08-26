@@ -1,17 +1,21 @@
 defaults:
-  - ./rl.yaml
+  - ./sft_stage2.yaml
 
 development: false
 wandb: false
 
+model:
+  checkpoint: src/runs/sft_stage2/0/checkpoints/epoch_best
+
 gpu:
-  strategy: null
+  strategy: null # null for one device, fsdp2 for multiple devices
+  device_map: "auto"
   gradient_checkpointing: false
 
-model:
-  checkpoint: src/runs/rl/0/checkpoints/epoch_best
-  trainable: []
-
 evaluation:
+  split_names: ["fold{fold}_test"]
   max_new_tokens: 1024
-  do_sample: false
+
+data:
+  data_names: [ELM-Research/ecg-qa-cot]
+  split_names: [fold1_test]
