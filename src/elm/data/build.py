@@ -155,7 +155,6 @@ class DataBuilder:
             print(f"{k.upper()} -> token: {t!r}, id: {i}")
         print("-" * 20)
 
-
 def build_data(config: dict, training: bool = True):
     builder = DataBuilder(config, training)
     tokenizer = builder.build_llm_tokenizer()
