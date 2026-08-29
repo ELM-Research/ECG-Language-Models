@@ -7,25 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ecg-reasoning-benc
 
 from ecg_reasoning_benchmark.evaluation import main
 from ecg_reasoning_benchmark.evaluators import Evaluator, register_evaluator
+from ecg_reasoning_benchmark.evaluators.gemini import prompt as JUDGE_PROMPT
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
-
-JUDGE_PROMPT = """You are a board-certified Cardiologist and an expert in ECG interpretation.
-Your task is to evaluate whether the [Model Response] is **clinically aligned** with the [Ground Truth].
-
-**[Context]**
-- Question: {}
-- Ground Truth (GT): {}
-- Model Response: {}
-
-**[Evaluation Criteria]**
-1. **Clinical Equivalence**: Do not just look for keyword matching. Look for clinical semantic equivalence.
-2. **Specific Terminology**: In ECG interpretation, specific terminology distinguishes different pathologies.
-3. **Contradiction**: If the response implies a different diagnosis, it is **FALSE**.
-
-**[Output Format]**
-Output exactly two lines. The first line is exactly "TRUE" if aligned or "FALSE" if not; the second is a one-sentence reason.
-"""
 
 
 @register_evaluator("openrouter")
