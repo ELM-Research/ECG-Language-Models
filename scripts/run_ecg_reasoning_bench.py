@@ -67,8 +67,6 @@ class ELM(BaseModel):
         self.config = config
         self.tokenizer = DataBuilder(config, training=False).build_llm_tokenizer()
         self.model = setup_model(build_model(config, self.tokenizer), config["gpu"]).eval()
-        with open(config["system_prompt_path"], encoding="utf-8") as file:
-            self.system_prompt = file.read()
 
     @classmethod
     def build_model(cls, config: str, checkpoint=None, **_):
@@ -85,7 +83,7 @@ class ELM(BaseModel):
 
     def get_response(self, conversation, enable_condensed_chat=False, verbose=False, **_) -> str:
         turns = conversation.get_turns_for_prompt()
-        messages = [{"role": "system", "content": self.system_prompt}]
+        messages = [{"role": "system", "content": conversation.conversation[0]["text"]}]
         ecg = None
         for index, turn in enumerate(turns):
             if turn["role"] == "model":
