@@ -6,6 +6,7 @@ from collections import Counter
 from pathlib import Path
 from textwrap import shorten
 
+import matplotlib as mpl
 from matplotlib.figure import Figure
 
 from elm.config.load import load_config
@@ -15,12 +16,30 @@ from elm.data.build import DataBuilder
 TOP_K = 20
 MAX_LABEL_LENGTH = 100
 
+BAR_COLOR = "#FF9295"
+EDGE_COLOR = "#073B50"
+GRID_COLOR = "#D5E4F2"
+
 CONFIGS = (
     Path("src/elm/config/experiment_9b/pretrain_stage1.yaml"),
     Path("src/elm/config/experiment_9b/pretrain_stage2.yaml"),
 )
 
 OUTPUT_DIR = Path("src/logs")
+
+
+mpl.rcParams.update(
+    {
+        "font.family": "serif",
+        "font.serif": ["Times New Roman"],
+        "font.size": 12,
+        "axes.titlesize": 16,
+        "axes.titleweight": "bold",
+        "axes.labelsize": 14,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+    }
+)
 
 
 def save_top_texts(name, counts):
@@ -42,16 +61,30 @@ def save_top_texts(name, counts):
 
     figure = Figure(figsize=(12, 8))
     axis = figure.subplots()
-    axis.barh(texts, frequencies)
+
+    axis.barh(
+        texts,
+        frequencies,
+        color=BAR_COLOR,
+        edgecolor=EDGE_COLOR,
+        linewidth=1.2,
+    )
     axis.set(
         title=f"{name}: Top {TOP_K} Most Frequent Texts",
         xlabel="Count",
     )
-    axis.grid(axis="x", alpha=0.25)
+    axis.grid(axis="x", color=GRID_COLOR, linewidth=1, alpha=0.8)
+    axis.set_axisbelow(True)
+
+    axis.spines["top"].set_visible(False)
+    axis.spines["right"].set_visible(False)
+    axis.spines["left"].set_color(EDGE_COLOR)
+    axis.spines["bottom"].set_color(EDGE_COLOR)
+
     figure.tight_layout()
 
     plot_path = OUTPUT_DIR / f"{name}_top_texts.png"
-    figure.savefig(plot_path, dpi=200)
+    figure.savefig(plot_path, dpi=200, bbox_inches="tight")
 
     return csv_path, plot_path
 
@@ -62,7 +95,10 @@ def main():
         tokenizer = builder.build_llm_tokenizer()
         dataset = builder.build_torch_dataset(tokenizer)
 
-        counts = Counter(instance["text"].replace("; .;", ";") for instance in dataset.data)
+        counts = Counter(
+            instance["text"].replace("; .;", ";")
+            for instance in dataset.data
+        )
         total = len(dataset)
         unique = len(counts)
 
