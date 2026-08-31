@@ -1,0 +1,20 @@
+defaults:
+  - ./common.yaml
+
+training:
+  training_stage: sft
+  batch_size: 10
+  gradient_accumulation_steps: 1
+  epochs: 3
+  resume: src/runs/sft_stage2/0/checkpoints/epoch_1
+
+optimizer:
+  learning_rate: 5.0e-5
+
+model:
+  checkpoint: src/runs/sft_stage1/1/checkpoints/epoch_best
+  trainable: [projector, language_model]
+
+data:
+  data_names: [ELM-Research/sft-stage2-noaug-filtered]
+  split_names: [fold1_train]

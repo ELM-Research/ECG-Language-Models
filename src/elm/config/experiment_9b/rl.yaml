@@ -1,0 +1,31 @@
+defaults:
+  - ./common.yaml
+
+explicit_thinking: false
+
+training:
+  training_stage: rl
+  batch_size: 1
+  gradient_accumulation_steps: 3
+  num_workers: 8
+  epochs: 3
+
+optimizer:
+  learning_rate: 5.0e-6
+  weight_decay: 0.01
+  scheduler: constant_with_warmup
+
+model:
+  trainable: [language_model]
+
+data:
+  data_names: [ELM-Research/rl-ecg-r1]
+  split_names: [fold1_train]
+
+rl:
+  group_size: 12
+  updates_per_rollout: 1
+  max_new_tokens: 1024
+  temperature: 0.9
+  tau_pos: 1.0
+  tau_neg: 1.05

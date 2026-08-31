@@ -40,6 +40,11 @@ class Checkpointer:
             self.best_loss = loss
             self.save("epoch_best")
 
+    def save_crash(self) -> None:
+        self.optimizer.zero_grad(set_to_none = True)
+        self.save("last_crashed")
+        if self.enabled and distributed.is_initialized(): distributed.barrier()
+
     def save(self, name: str) -> None:
         if not self.enabled:
             return

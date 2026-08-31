@@ -1,5 +1,5 @@
 defaults:
-  - ../common.yaml
+  - ./common.yaml
 
 training:
   training_stage: sft

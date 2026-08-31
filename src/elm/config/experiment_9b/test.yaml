@@ -1,5 +1,5 @@
 defaults:
-  - ../common.yaml
+  - ./common.yaml
 
 training:
   training_stage: sft
@@ -15,6 +15,8 @@ model:
   checkpoint: src/runs/sft_stage1/0/checkpoints/epoch_best
   trainable: [projector, language_model]
 
+
 data:
-  data_names: [ELM-Research/sft-stage2-noaug-filtered]
+  data_names: [ELM-Research/mimic-ecg-reasoning-converted]
   split_names: [fold1_train]
+

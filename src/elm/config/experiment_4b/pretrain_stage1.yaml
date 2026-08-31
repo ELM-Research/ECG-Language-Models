@@ -1,0 +1,19 @@
+defaults:
+  - ./common.yaml
+
+training:
+  training_stage: pretrain
+  batch_size: 12
+  gradient_accumulation_steps: 1
+  epochs: 3
+
+optimizer:
+  learning_rate: 5.0e-4
+
+model:
+  trainable: [projector]
+  vision_model: /p01/whan/ecg_encoder/src/runs/pretrain/siglip2-base-patch16-naflex/2/hf_converted
+
+data:
+  data_names: [ELM-Research/pretrain-stage1]
+  split_names: [fold1_train]

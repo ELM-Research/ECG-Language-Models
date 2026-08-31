@@ -18,6 +18,12 @@ from elm.utils.parallelism import (
 from elm.utils.seed import set_seed
 RUNS_DIR = "./src/runs"
 
+def save_crash_checkpoint(checkpointer: Checkpointer) -> None:
+    try:
+        checkpointer.save_crash()
+    except BaseException as error:
+        if is_main(): print(f"Failed to save crash checkpoint: {error}")
+
 def main():
     config, exp_name = get_config()
     resume = config["training"].get("resume")
@@ -44,18 +50,22 @@ def main():
                                     config["training"].get("save_steps"),
                                     enabled=not config["development"])
         start_epoch, start_batch = checkpointer.load(resume) if resume else (0, 0)
-        for epoch in range(start_epoch, config["training"]["epochs"]):
-            skip_batches = start_batch if epoch == start_epoch else 0
-            if config["training"]["training_stage"] == "rl":
-                result = train_rl_epoch(model, optimizer, scheduler, checkpointer,
-                                        dataloader, tokenizer, config, epoch, skip_batches)
-            else:
-                result = train_supervised_epoch(model, optimizer, scheduler, checkpointer,
-                                                dataloader, config, epoch, skip_batches)
-            if not skip_batches:
-                checkpointer.save_best(result["average_loss"])
-            if is_main():
-                print(f"Epoch {epoch + 1}: loss={result['average_loss']:.4f}")
+        try:
+            for epoch in range(start_epoch, config["training"]["epochs"]):
+                skip_batches = start_batch if epoch == start_epoch else 0
+                if config["training"]["training_stage"] == "rl":
+                    result = train_rl_epoch(model, optimizer, scheduler, checkpointer,
+                                            dataloader, tokenizer, config, epoch, skip_batches)
+                else:
+                    result = train_supervised_epoch(model, optimizer, scheduler, checkpointer,
+                                                    dataloader, config, epoch, skip_batches)
+                if not skip_batches:
+                    checkpointer.save_best(result["average_loss"])
+                if is_main():
+                    print(f"Epoch {epoch + 1}: loss={result['average_loss']:.4f}")
+        except BaseException:
+            save_crash_checkpoint(checkpointer)
+            raise
 
     finally:
         if config["wandb"] and is_main():

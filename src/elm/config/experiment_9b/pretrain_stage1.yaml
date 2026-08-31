@@ -1,9 +1,9 @@
 defaults:
-  - ../common.yaml
+  - ./common.yaml
 
 training:
   training_stage: pretrain
-  batch_size: 12
+  batch_size: 10
   gradient_accumulation_steps: 1
   epochs: 3
 

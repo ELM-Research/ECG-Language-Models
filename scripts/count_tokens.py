@@ -16,8 +16,11 @@ from elm.data.build import DataBuilder
 
 
 DEFAULT_CONFIGS = (
-    # Path("src/elm/config/experiment/sft_stage1.yaml"),
-    Path("src/elm/config/experiment/test.yaml"),
+    Path("src/elm/config/experiment/pretrain_stage1.yaml"),
+    Path("src/elm/config/experiment/pretrain_stage2.yaml"),
+    Path("src/elm/config/experiment/sft_stage1.yaml"),
+    Path("src/elm/config/experiment/sft_stage2.yaml"),
+    Path("src/elm/config/experiment/rl.yaml"),
 )
 
 
@@ -66,6 +69,8 @@ def main():
     args = parse_args()
     overall_min = (float("inf"), None, None)
     overall_max = (-1, None, None)
+    overall_tokens = 0
+    overall_instances = 0
     counts = {}
 
     for config_path in args.configs:
@@ -78,28 +83,58 @@ def main():
         stage_min = (float("inf"), None)
         stage_max = (-1, None)
         stage_counts = Counter()
+        stage_tokens = 0
 
         def token_length(instance):
-            data_inst = dataset.prepare_text(instance["text"], placeholders)["input_ids"]
-            return len(data_inst)
+            input_ids = dataset.prepare_text(
+                instance["text"],
+                placeholders,
+            )["input_ids"]
+            return len(input_ids)
 
         lengths = threaded_map(token_length, dataset.data, args.workers)
-        for index, length in enumerate(tqdm(lengths, total=len(dataset), desc=config_path.stem)):
+        for index, length in enumerate(
+            tqdm(lengths, total=len(dataset), desc=config_path.stem)
+        ):
             stage_counts[length] += 1
+            stage_tokens += length
             stage_min = min(stage_min, (length, index))
             stage_max = max(stage_max, (length, index))
 
+        stage_instances = len(dataset)
+        average_length = stage_tokens / stage_instances
+
         counts[config_path.stem] = stage_counts
-        print(f"{config_path.stem}: {len(dataset):,} instances")
+        overall_tokens += stage_tokens
+        overall_instances += stage_instances
+
+        print(f"{config_path.stem}:")
+        print(f"  instances: {stage_instances:,}")
+        print(f"  total tokens: {stage_tokens:,}")
+        print(f"  average token length: {average_length:,.2f}")
         print(f"  min: {stage_min[0]:,} tokens at index {stage_min[1]}")
         print(f"  max: {stage_max[0]:,} tokens at index {stage_max[1]}")
+
         overall_min = min(overall_min, (*stage_min, config_path.stem))
         overall_max = max(overall_max, (*stage_max, config_path.stem))
+
         del token_length, lengths, dataset, builder, tokenizer
 
+    overall_average = overall_tokens / overall_instances
+
     print("overall:")
-    print(f"  min: {overall_min[0]:,} tokens in {overall_min[2]} at index {overall_min[1]}")
-    print(f"  max: {overall_max[0]:,} tokens in {overall_max[2]} at index {overall_max[1]}")
+    print(f"  instances: {overall_instances:,}")
+    print(f"  total tokens: {overall_tokens:,}")
+    print(f"  average token length: {overall_average:,.2f}")
+    print(
+        f"  min: {overall_min[0]:,} tokens "
+        f"in {overall_min[2]} at index {overall_min[1]}"
+    )
+    print(
+        f"  max: {overall_max[0]:,} tokens "
+        f"in {overall_max[2]} at index {overall_max[1]}"
+    )
+
     csv_path, plot_path = save_distribution(counts, args.output_dir)
     print(f"counts: {csv_path}")
     print(f"plot: {plot_path}")

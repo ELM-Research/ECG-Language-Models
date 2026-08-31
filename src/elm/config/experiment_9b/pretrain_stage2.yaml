@@ -1,0 +1,19 @@
+defaults:
+  - ./common.yaml
+
+training:
+  training_stage: pretrain
+  batch_size: 10
+  gradient_accumulation_steps: 1
+  epochs: 1
+
+optimizer:
+  learning_rate: 2.0e-4
+
+model:
+  checkpoint: src/runs/pretrain_stage1/1/checkpoints/epoch_3
+  trainable: [projector, language_model]
+
+data:
+  data_names: [ELM-Research/pretrain-stage2]
+  split_names: [fold1_train]
