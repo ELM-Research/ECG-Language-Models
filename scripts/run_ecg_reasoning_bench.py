@@ -94,7 +94,6 @@ class ELM(BaseModel):
                 ecg = self._prepare_signal(turn["signal"])
                 content = ECG_TOKEN_PLACEHOLDER * self.config["model"]["num_ecg_tokens"] + "\n" + content
             messages.append({"role": "user", "content": content})
-
         prompt = chat_prompt(self.tokenizer, messages, self.config["explicit_thinking"])
         with torch.no_grad():
             output = generate_response(

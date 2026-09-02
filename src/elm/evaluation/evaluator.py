@@ -95,7 +95,7 @@ def generate_response(model, input_ids: list[int], ecg_values, tokenizer, evalua
         "attention_mask": torch.ones_like(input_ids),
         "max_new_tokens": evaluation["max_new_tokens"],
         "do_sample": evaluation["do_sample"],
-        "use_cache": True
+        "use_cache": True,
     }
     if ecg_values is not None:
         generation["ecg_values"] = torch.as_tensor(ecg_values, device=device).unsqueeze(0)

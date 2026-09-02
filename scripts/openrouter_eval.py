@@ -17,7 +17,7 @@ class OpenRouterEvaluator(Evaluator):
     @staticmethod
     def parse_arguments(args) -> argparse.Namespace:
         parser = Evaluator.add_default_arguments()
-        parser.add_argument("--openrouter-model", default="google/gemini-2.5-flash", help="OpenRouter model id")
+        parser.add_argument("--openrouter-model", default="google/gemini-3-flash-preview", help="OpenRouter model id")
         parser.add_argument("--api-key", default=None, help="OpenRouter API key (else $OPENROUTER_API_KEY)")
         parser.add_argument("--base-url", default="https://openrouter.ai/api/v1")
         return parser.parse_args(args)
