@@ -25,11 +25,14 @@ class Checkpointer:
         self.steps = 0
         self.epoch = self.batch = 0
         self.best_loss = float("inf")
+        self.best_reward = float("-inf")
 
-    def step(self, epoch: int, batch: int, steps: int = 1) -> None:
+    def step(self, epoch: int, batch: int, steps: int = 1, *, reward: float | None = None) -> None:
         previous = self.steps
         self.steps += steps
         self.epoch, self.batch = epoch, batch
+        if reward is not None:
+            self.save_best_reward(reward)
         if self.save_steps is None and batch == 0:
             self.save(f"epoch_{epoch}")
         elif self.save_steps and self.steps // self.save_steps > previous // self.save_steps:
@@ -38,6 +41,11 @@ class Checkpointer:
     def save_best(self, loss: float) -> None:
         if loss < self.best_loss:
             self.best_loss = loss
+            self.save("epoch_best")
+
+    def save_best_reward(self, reward: float) -> None:
+        if reward > self.best_reward:
+            self.best_reward = reward
             self.save("epoch_best")
 
     def save_crash(self) -> None:
@@ -61,7 +69,7 @@ class Checkpointer:
             state_path = path / "trainer_state.pt"
             torch.save({"optimizer": optimizer_state, "scheduler": self.scheduler.state_dict(),
                         "steps": self.steps, "epoch": self.epoch, "batch": self.batch,
-                        "best_loss": self.best_loss}, state_path)
+                        "best_loss": self.best_loss, "best_reward": self.best_reward}, state_path)
             print(f"Saved checkpoint: {path}")
 
     def load(self, path: str | Path) -> tuple[int, int]:
@@ -84,6 +92,7 @@ class Checkpointer:
         self.scheduler.load_state_dict(state["scheduler"])
         self.steps, self.epoch, self.batch = state["steps"], state["epoch"], state["batch"]
         self.best_loss = state["best_loss"]
+        self.best_reward = state.get("best_reward", float("-inf"))
         if is_main():
             print(f"Resumed checkpoint: {path}")
         return self.epoch, self.batch

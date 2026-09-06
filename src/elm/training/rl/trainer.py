@@ -22,8 +22,8 @@ def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, tokenizer
     device = begin_epoch(model, dataloader, epoch)
     progress = tqdm(dataloader, desc=f"RL epoch {epoch + 1}", disable=not is_main(), leave=False)
     rollouts = []
-    total_loss = 0.0
-    loss_windows = optimizer_steps = 0
+    total_loss = total_reward = 0.0
+    loss_windows = optimizer_steps = total_prompts = 0
 
     for step, batch in enumerate(progress):
         if step < start_batch:
@@ -33,6 +33,8 @@ def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, tokenizer
             rollout = rollout_group(
                 model, batch, item, tokenizer, rl, config.get("explicit_thinking", False))
             rollouts.append(rollout)
+            total_reward += sum(rollout["rewards"].values())
+            total_prompts += 1
 
         update = (step + 1) % accumulation_steps == 0 or step + 1 == len(dataloader)
         if not update:
@@ -67,8 +69,10 @@ def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, tokenizer
                 optimizer_step(model, optimizer, scheduler, training["max_grad_norm"])
 
         next_epoch = epoch + (step + 1 == len(dataloader))
+        epoch_reward = (distributed_mean(total_reward, total_prompts, device)
+                        if next_epoch > epoch and not start_batch else None)
         checkpointer.step(next_epoch, (step + 1) % len(dataloader),
-                          rl["updates_per_rollout"] if has_signal else 0)
+                          rl["updates_per_rollout"] if has_signal else 0, reward=epoch_reward)
 
         loss = distributed_mean(loss_sum, rl["updates_per_rollout"], device) if has_signal else 0.0
         kl = distributed_mean(kl_sum, kl_tokens, device) if has_signal else 0.0
@@ -87,5 +91,6 @@ def train_epoch(model, optimizer, scheduler, checkpointer, dataloader, tokenizer
 
     return {
         "average_loss": total_loss / max(loss_windows, 1),
+        "average_reward": distributed_mean(total_reward, total_prompts, device),
         "optimizer_steps": optimizer_steps,
     }

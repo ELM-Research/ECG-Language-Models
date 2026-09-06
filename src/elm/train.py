@@ -59,7 +59,7 @@ def main():
                 else:
                     result = train_supervised_epoch(model, optimizer, scheduler, checkpointer,
                                                     dataloader, config, epoch, skip_batches)
-                if not skip_batches:
+                if not skip_batches and config["training"]["training_stage"] != "rl":
                     checkpointer.save_best(result["average_loss"])
                 if is_main():
                     print(f"Epoch {epoch + 1}: loss={result['average_loss']:.4f}")

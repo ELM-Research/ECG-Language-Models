@@ -1,19 +1,20 @@
 import torch
+from torch.utils.checkpoint import checkpoint
 from elm.training.rl.rewards import reward_components
+
+# Bound float32 softmax workspace to 128 token rows, independent of group size.
+_LOG_PROB_CHUNK_SIZE = 128
 
 def eos_set(model) -> set:
     generation_model = getattr(model, "language_model", model)
     eos = generation_model.generation_config.eos_token_id
     return {eos} if isinstance(eos, int) else set(eos or ())
 
-def trim_mask(new_tokens: torch.Tensor, eos_ids: set, pad_id: int | None = None) -> torch.Tensor:
+def trim_mask(new_tokens: torch.Tensor, eos_ids: set) -> torch.Tensor:
     is_eos = torch.zeros_like(new_tokens, dtype=torch.bool)
     for eos_id in eos_ids:
         is_eos |= new_tokens == eos_id
-    mask = is_eos.cumsum(dim=1) - is_eos.long() == 0
-    if pad_id is not None and pad_id not in eos_ids:
-        mask &= new_tokens != pad_id
-    return mask
+    return is_eos.cumsum(dim=1) - is_eos.long() == 0
 
 def _decode_for_reward(tokenizer, ids: torch.Tensor, strip_ids: set) -> str:
     kept = [int(t) for t in ids.tolist() if int(t) not in strip_ids]
@@ -28,23 +29,27 @@ def final_response_range(labels: torch.Tensor) -> tuple[int, int]:
     start = indices[gaps[-1] + 1] if gaps.numel() else indices[0]
     return start.item(), indices[-1].item() + 1
 
-def log_prob_at_response(model, ids, attn, ecg, pL: int, temperature: float) -> torch.Tensor:
-    targets = ids[:, pL:]
-    was_training = model.training
-    model.eval()
-    try:
-        out = model(
-            input_ids=ids,
-            attention_mask=attn,
-            ecg_values=ecg,
-            logits_to_keep=targets.shape[1] + 1,
-            use_cache=False,
-        )
-    finally:
-        model.train(was_training)
-    logits = out.logits[:, -targets.shape[1] - 1:-1].float() / temperature
+def _selected_log_prob(logits, targets, temperature):
+    logits = logits.float() / temperature
     selected = logits.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
     return selected - logits.logsumexp(dim=-1)
+
+
+def log_prob_at_response(model, ids, attn, ecg, pL: int, temperature: float) -> torch.Tensor:
+    targets = ids[:, pL:]
+    out = model(
+        input_ids=ids[:, :-1],
+        attention_mask=attn[:, :-1],
+        ecg_values=ecg,
+        logits_to_keep=targets.shape[1],
+        use_cache=False,
+    )
+    logits = out.logits.flatten(0, 1).split(_LOG_PROB_CHUNK_SIZE)
+    target_chunks = targets.reshape(-1).split(_LOG_PROB_CHUNK_SIZE)
+    # Recompute reductions in backward instead of retaining float32 vocabulary tensors.
+    log_probs = [checkpoint(_selected_log_prob, chunk, target, temperature, use_reentrant=False)
+                 for chunk, target in zip(logits, target_chunks)]
+    return torch.cat(log_probs).view_as(targets)
 
 def rollout_group(
     model,
@@ -92,9 +97,13 @@ def rollout_group(
                 max_new_tokens=config["max_new_tokens"],
                 do_sample=True,
                 temperature=config["temperature"],
+                top_k=0,
+                top_p=1.0,
+                min_p=0.0,
+                repetition_penalty=1.0,
                 eos_token_id=sorted(eos_ids),
                 pad_token_id=pad_id,
-                use_cache = True,
+                use_cache=True,
             )
 
         includes_prompt = gen.shape[1] >= pL and torch.equal(gen[0, :pL], prompt_ids)
@@ -102,7 +111,7 @@ def rollout_group(
         if new_tokens.shape[1] == 0:
             new_tokens = torch.full((group_size, 1), pad_id, dtype=torch.long, device=device)
 
-        resp_mask = trim_mask(new_tokens, eos_ids, pad_id)
+        resp_mask = trim_mask(new_tokens, eos_ids)
 
         components = [
             reward_components(
