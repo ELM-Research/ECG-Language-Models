@@ -6,14 +6,14 @@ training:
   batch_size: 12
   gradient_accumulation_steps: 1
   epochs: 3
+  resume: src/runs/sft_stage2/2/checkpoints/epoch_1
 
 optimizer:
   learning_rate: 5.0e-5
 
 model:
-  checkpoint: src/runs/sft_stage1/0/checkpoints/epoch_best
   trainable: [projector, language_model]
 
 data:
-  data_names: [ELM-Research/sft-stage2-ptbxl-noaug-filtered]
+  data_names: [ELM-Research/sft-stage2-ptbxl-noaug-filtered-25pct]
   split_names: [fold1_train]

@@ -11,9 +11,9 @@ optimizer:
   learning_rate: 1.0e-4
 
 model:
-  checkpoint: src/runs/pretrain_stage2/0/checkpoints/epoch_best
+  checkpoint: src/runs/pretrain_stage2/1/checkpoints/epoch_best
   trainable: [projector, language_model]
 
 data:
-  data_names: [ELM-Research/sft-stage1-noaug-filtered]
+  data_names: [ELM-Research/sft-stage1-noaug-filtered-25pct]
   split_names: [fold1_train]

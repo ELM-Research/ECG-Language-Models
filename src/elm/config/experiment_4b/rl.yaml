@@ -24,7 +24,7 @@ data:
   split_names: [fold1_train]
 
 rl:
-  group_size: 12
+  group_size: 6
   updates_per_rollout: 1
   max_new_tokens: 1024
   temperature: 1.0

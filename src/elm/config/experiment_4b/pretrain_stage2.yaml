@@ -11,9 +11,9 @@ optimizer:
   learning_rate: 2.0e-4
 
 model:
-  checkpoint: src/runs/pretrain_stage1/0/checkpoints/epoch_best
+  checkpoint: src/runs/pretrain_stage1/1/checkpoints/epoch_best
   trainable: [projector, language_model]
 
 data:
-  data_names: [ELM-Research/pretrain-stage2]
+  data_names: [ELM-Research/pretrain-stage2-25pct]
   split_names: [fold1_train]

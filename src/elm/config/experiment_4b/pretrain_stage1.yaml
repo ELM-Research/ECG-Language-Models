@@ -15,5 +15,5 @@ model:
   vision_model: /p01/whan/ecg_encoder/src/runs/pretrain/siglip2-base-patch16-naflex/2/hf_converted
 
 data:
-  data_names: [ELM-Research/pretrain-stage1]
+  data_names: [ELM-Research/pretrain-stage1-25pct]
   split_names: [fold1_train]
