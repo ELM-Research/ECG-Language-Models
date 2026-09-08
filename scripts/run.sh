@@ -31,4 +31,17 @@ CUDA_VISIBLE_DEVICES=0,1,2,4,6,7 uv run torchrun \
   --standalone \
   --nproc-per-node=6 \
   --module elm.train \
-  --config "src/elm/config/experiment_4b/rl.yaml"
+  --config "src/elm/config/experiment_4b_no_data/rl.yaml"
+
+CUDA_VISIBLE_DEVICES=0,1,2,4,6,7 uv run torchrun \
+  --standalone \
+  --nproc-per-node=6 \
+  --module elm.train \
+  --config "src/elm/config/experiment_4b_ptbxl/rl.yaml"
+
+  
+CUDA_VISIBLE_DEVICES=0,1,2,4,6,7 uv run torchrun \
+  --standalone \
+  --nproc-per-node=6 \
+  --module elm.train \
+  --config "src/elm/config/experiment_4b_25/rl.yaml"
